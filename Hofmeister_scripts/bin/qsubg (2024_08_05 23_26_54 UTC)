@@ -1,0 +1,140 @@
+#!/bin/sh
+#
+# Submit a Gaussian 09 job to the grid
+#
+# $1      -- name of input file
+# $2      -- wall time (hours)
+# 
+# Number of processors will be read from the Gaussian input file
+# Memory per processor is 1.8 Gb per node
+#
+# Additional specification in the input line is possible only after supplying walltime in hours
+#
+# First check if the queue exists
+#
+
+#
+# check for the input file
+#
+
+#if [ $# -ne 3 ]
+#then
+#   echo "Usage: $0 input-file[.com]  wallclocktime(hh:mm:ss) #nodes"
+#   exit 1
+#fi
+#
+#nodes=$3
+
+if [ $# -ne 2 ]
+then
+   echo "Usage: $0 input-file[.com]  wallclocktime(hh:mm:ss)"
+   exit 1
+fi
+nodes=1
+
+# split file into name & extension
+
+if [ -n `echo $1 | grep '.com'` ]
+then
+ f=`basename  $1 .com`
+else
+ f="$1"
+fi
+
+# Check if the input file exists with extension .com
+
+if ! test -e $f.com
+then
+	echo "$f.com DOES NOT exist"
+	echo "This job is not submitted"
+	exit 1
+fi
+# Get the number of processors in the Gaussian input file. 
+# default behaviour is to run on a single node
+
+NPROC_LINE=`grep -i "%nproc" $f.com | tail -n1 | cut -d= -f1` # Use backtick character
+MEM_LINE=`grep -i "%mem" $f.com | tail -n1 | cut -d= -f1` # Use backtick character
+
+if [ "$NPROC_LINE" = "" ]
+then
+    NPROC=1
+else
+    NPROC=`grep -i "nproc" $f.com | tail -n1 | cut -d= -f2` 
+    NPROC=$( echo "$NPROC" | sed "s/ //g" )
+fi
+
+if [ $NPROC -gt 64 ]
+then
+ echo "maximum procs is 64 for the grid. Exiting..."
+ exit 1
+fi
+
+if [ "$MEM_LINE" = "" ]
+then
+ echo "no %mem specified in input file..."
+ exit 1
+else
+    MEM=`grep -i "mem" $f.com | tail -n1 | cut -d= -f2` 
+    MEM=$( echo "$MEM" | sed "s/ //g" )
+    if [ ! -z "`echo $MEM | grep -i 'gb'`" ]
+    then
+     MEM=$( echo "$MEM" | sed "s/[A-Z,a-z]//g" )
+     MEM=`echo "$MEM/$nodes" | bc`
+     MEM=`expr $MEM + 2`
+     MEM=`echo $MEM\GB`
+    fi
+    if [ ! -z "`echo $MEM | grep -i 'mb'`" ]
+    then
+     MEM=$( echo "$MEM" | sed "s/[A-Z,a-z]//g" )
+     MEM=`echo "$MEM/$nodes" | bc`
+     MEM=`expr $MEM + 2000`
+     MEM=`echo $MEM\MB`
+    fi
+fi
+
+NPROC=`echo "$NPROC/$nodes" | bc`
+
+
+# Start creating the input file
+cat <<END >>$f.job
+#!/bin/bash
+#PBS -N $f
+#PBS -l select=$nodes:ncpus=$NPROC:mem=$MEM
+#PBS -l walltime=$2
+#PBS -l software=gaussian
+#PBS -r n
+
+module load gaussian
+export OMP_NUM_THREADS=$NPROC
+ulimit -s unlimited
+
+#g16 stuff
+#g16root=/home/ajp/
+#g16root=/cm/software/apps/gaussian/g16/
+#export g16root
+export GAUSS_EXEDIR=/cm/software/apps/gaussian/g16
+#. $g16root/g16/bsd/g16.profile
+
+
+cd \$PBS_O_WORKDIR
+echo "This job is running on host \`hostname\`" > $f.out
+echo "Current directory: \$PBS_O_WORKDIR" >> $f.out
+date >> $f.out
+
+
+mkdir -p \$GAUSS_SCRDIR
+
+# do it
+g16 < $f.com >> $f.out 
+
+# clean up /tmp
+#rm -rf \$GAUSS_SCRDIR
+
+END
+
+# Now submit it.
+qsub $f.job
+rm -f $f.job
+
+exit 0
+

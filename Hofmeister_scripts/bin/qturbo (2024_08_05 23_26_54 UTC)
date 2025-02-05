@@ -1,0 +1,125 @@
+#!/bin/bash
+
+if [ $# -ne 5 ]
+then
+ echo "Usage: $0 job cores mem(gb) time(hh:mm:ss) joblist (e.g. 'sp,opt,freq,ridft' etc. - separate joblist with commas, in the desired order)"
+ exit 1
+fi
+
+job=$1
+cores=$2
+mem=$3
+walltime=$4
+joblist=$5
+
+if [ $cores -ge 64 ]
+then
+ echo "The grid only allows <64 core jobs. Job is not submitted."
+ exit 1
+fi
+
+if [ ! -f control ]
+then
+ echo "The file 'control' does not exist. Job is not submitted."
+ exit 1
+fi
+
+#get coordinate structure file, make sure it exists
+geomfile=`grep '$coord' control | awk '{ print $2 }' | sed 's/file=//g'`
+basisfile=`grep '$basis' control | awk '{ print $2 }' | sed 's/file=//g'`
+mofile=`grep '$scfmo' control | awk '{ print $2 }' | sed 's/file=//g'`
+
+for f in $geomfile $basisfile $mofile
+do
+ if [ ! -n "$f" ]
+ then
+  echo "basis/geom/MO file is not specified in file 'control'. Job is not submitted."
+  exit 1
+ fi
+
+ if [ ! -f $f ]
+ then
+  echo "basis/geom/MO file $f, required by file 'control', does not exist. Job is not submitted."
+  exit 1
+ fi
+done
+
+#what jobs will we do?
+sp=`echo $joblist | grep 'sp'`
+opt=`echo $joblist | grep 'opt'`
+freq=`echo $joblist | grep 'freq'`
+ridft=`echo $joblist | grep 'ridft'`
+
+#check that job request exists
+
+if [ ! -n "$sp" ] && [ ! -n "$opt" ] && [ ! -n "$freq" ] && [ ! -n "$ridft" ]
+then
+ echo "The type of calculation requested ($joblist) is not available. Job is not submitted."
+ exit 1
+fi
+
+cat <<END > submit
+#!/bin/bash
+#PBS -N $job
+#PBS -l select=1:ncpus=$cores:mem=$mem
+#PBS -l walltime=$walltime
+#PBS -k eo
+
+export TURBODIR=/home/ajp/TURBOMOLE
+export PATH=\$TURBODIR/scripts:\$PATH
+export PARA_ARCH="SMP"
+export PARNODES=$cores
+export PATH=\$TURBODIR/bin/\`sysname\`:\$PATH
+
+mkdir -p /tmp/\$\$
+
+for f in control $geomfile $basisfile $mofile
+do
+ cp \$PBS_O_WORKDIR/\$f /tmp/\$\$
+done
+
+
+cd /tmp/\$\$
+
+echo "Job running on \`hostname\`"
+echo "Working directory is /tmp/\$\$"
+END
+
+# do optimization [Makes sense to have this first, so it will do the further calcs on an optimised structure]
+if [ -n "$opt" ]
+then
+cat <<END >> submit
+jobex
+END
+fi
+#do ri singlepoint calc
+if [ -n "$ridft" ]
+then
+cat <<END >> submit
+ridft > $job.ridft
+END
+fi
+# do single point
+if [ -n "$sp" ]
+then
+cat <<END >> submit
+dscf > $job.singlepoint
+END
+fi
+# do freq
+if [ -n "$freq" ]
+then
+cat <<END >> submit
+aoforce > $job.freq
+END
+fi
+
+cat <<END >> submit
+mv -f * \$PBS_O_WORKDIR
+rm -rf /tmp/\$\$
+END
+
+
+#do it
+qsub submit ; rm -f submit
+                                           

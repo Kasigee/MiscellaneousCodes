@@ -1,0 +1,40 @@
+#!/bin/bash
+
+if [ $# -ne 3 ]
+then
+ echo "Usage: $0 solvent solute nsolvent"
+ exit 1
+fi
+
+solvent=$1
+solute=$2
+nsolvent=$3
+job="$solvent""$solute""$nsolvent"
+
+
+cat <<END > $1.job
+#!/bin/bash 
+#PBS -N $job
+#PBS -l select=1:ncpus=1:mem=1gb
+#PBS -l walltime=1:00:00
+#PBS -k eo
+#PBS -q allq
+
+
+export PATH=$PATH:~/bin/
+export OMP_NUM_THREADS=1
+export USERSCR=\$TMPDIR
+export SCR=\$TMPDIR
+ulimit -s unlimited
+
+#cd \$PBS_O_WORKDIR
+cd /home/kpg600/Solvation_website_2
+
+#./ZipCreation.sh $solvent $solute $nsolvent
+./ZipCreation2.sh $solvent $solute $nsolvent
+
+END
+
+#do it
+qsub $1.job 
+rm -f $1.job

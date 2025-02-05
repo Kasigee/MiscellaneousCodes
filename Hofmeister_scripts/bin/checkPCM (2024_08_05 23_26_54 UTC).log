@@ -1,0 +1,163 @@
+hf_pcmeda40.out
+ INPUT CARD> $pcmcav rin(1)=1.112 rin(2)=1.383 rin(3)=1.112 rin(4)=1.383 alpha(1)=1.1 $end  
+ INPUT CARD> $tescav mthall=4 ntsall=240 $end                                               
+ES= -7.76
+EX= -5.32
+REP= 10.30
+POL= -1.02
+DESOL= 0.13
+DISP= -0.68
+E= -4.33
+hf_pcmeda44.out
+hf_pcmeda45.out
+ INPUT CARD> !$tescav mthall=4 ntsall=240 $end                                              
+ES= -7.50
+EX= -5.35
+REP= 10.34
+POL= -1.28
+DESOL= 0.19
+DISP= -0.64
+E= -4.24
+hf_pcmeda46.out
+ INPUT CARD> $pcmcav rin(1)=1.112 rin(2)=1.383 rin(3)=1.112 rin(4)=1.383 alpha(1)=1.1 $end  
+ INPUT CARD> !$tescav mthall=4 ntsall=240 $end                                              
+ES= -7.68
+EX= -5.35
+REP= 10.35
+POL= -1.11
+DESOL= -0.13
+DISP= -0.66
+E= -4.58
+hf_pcmeda47.out
+ INPUT CARD> $pcmcav alpha(1)=1.1 $end                                                      
+ INPUT CARD> !$tescav mthall=4 ntsall=240 $end                                              
+ES= -7.62
+EX= -5.30
+REP= 10.28
+POL= -1.14
+DESOL= 0.11
+DISP= -0.66
+E= -4.34
+hf_pcmeda48.out
+ES= -7.50
+EX= -5.35
+REP= 10.34
+POL= -1.28
+DESOL= 0.19
+DISP= -0.64
+E= -4.24
+hf_pcmeda49.out
+ INPUT CARD> $pcmcav rin(1)=1.112 rin(2)=1.383 rin(3)=1.112 rin(4)=1.383 alpha(1)=1.1 $end  
+ INPUT CARD> !$tescav mthall=4 ntsall=240 $end                                              
+ES= -7.68
+EX= -5.35
+REP= 10.35
+POL= -1.11
+DESOL= -0.13
+DISP= -0.66
+E= -4.58
+hf_pcmeda50.out
+ INPUT CARD> !$pcmcav rin(1)=1.112 rin(2)=1.383 rin(3)=1.112 rin(4)=1.383 alpha(1)=1.1 $end 
+ INPUT CARD> $pcmcav radii=suahf alpha(1)=1.1 $end                                          
+ INPUT CARD> !$tescav mthall=4 ntsall=240 $end                                              
+ES= -8.23
+EX= -5.52
+REP= 10.60
+POL= -0.64
+DESOL= -0.59
+DISP= -0.66
+E= -5.03
+hf_pcmeda51.out
+ INPUT CARD> $pcmcav rin(1)=0.354 rin(2)=0.668 rin(3)=0.354 rin(4)=0.668 alpha(1)=1.1 $end  
+ES= -6.37
+EX= -6.58
+REP= 12.00
+POL= -2.85
+DESOL= -0.06
+DISP= -0.20
+E= -4.05
+hf_pcmeda52.out
+ INPUT CARD> $pcmcav rin(1)=1.443 rin(2)=1.682 rin(3)=1.443 rin(4)=1.682 alpha(1)=1.1 $end  
+ES= -7.29
+EX= -5.47
+REP= 10.52
+POL= -1.55
+DESOL= -0.19
+DISP= -0.58
+E= -4.56
+hf_pcmeda53.out
+ INPUT CARD> $pcmcav rin(1)=1.443 rin(2)=1.682 rin(3)=1.443 rin(4)=1.682 alpha(1)=1.1 $end  
+ INPUT CARD> $tescav ntsall=960 mthall=4 $end                                               
+ES= -7.33
+EX= -5.45
+REP= 10.49
+POL= -1.50
+DESOL= -0.04
+DISP= -0.59
+E= -4.42
+hf_pcmeda54.out
+ INPUT CARD> $pcmcav rin(1)=1.443 rin(2)=1.682 rin(3)=1.443 rin(4)=1.682 alpha(1)=1.1 $end  
+ INPUT CARD> $tescav ntsall=240 mthall=4 $end                                               
+ES= -7.32
+EX= -5.46
+REP= 10.51
+POL= -1.52
+DESOL= -0.09
+DISP= -0.59
+E= -4.47
+hf_pcmeda55.out
+ INPUT CARD> $pcmcav rin(1)=1.112 rin(2)=1.383 rin(3)=1.112 rin(4)=1.383 alpha(1)=1.1 $end  
+ INPUT CARD> !$tescav mthall=4 ntsall=240 $end                                              
+ES= -7.68
+EX= -5.35
+REP= 10.35
+POL= -1.11
+DESOL= -0.13
+DISP= -0.66
+E= -4.58
+hf_pcmeda56.out
+ INPUT CARD> $pcmcav rin(1)=1.112 rin(2)=1.383 rin(3)=1.112 rin(4)=1.383 alpha(1)=1.1 $end  
+ INPUT CARD> $tescav mthall=4 ntsall=960 $end                                               
+ES= -7.81
+EX= -5.29
+REP= 10.26
+POL= -0.95
+DESOL= 0.34
+DISP= -0.69
+E= -4.14
+hf_pcmeda57.out
+ INPUT CARD> $pcmcav rin(1)=0.354 rin(2)=0.668 rin(3)=0.354 rin(4)=0.668 alpha(1)=1.1 $end  
+ INPUT CARD> $tescav ntsall=960 mthall=4 $end                                               
+ES= -6.26
+EX= -6.89
+REP= 12.39
+POL= -3.03
+DESOL= 0.09
+DISP= 0.05
+E= -3.65
+hf_pcmeda_m062x.out
+ INPUT CARD> $pcmcav rin(1)=1.112 rin(2)=1.383 rin(3)=1.112 rin(4)=1.383 alpha(1)=1.1 $end  
+ INPUT CARD> $tescav mthall=4 ntsall=240 $end                                               
+ES= -8.71
+EX= -3.48
+REP= 11.00
+POL= -1.02
+DESOL= -0.02
+DISP= -2.92
+OR E=
+hf_pcmeda.out
+ES= -7.50
+EX= -5.35
+REP= 10.34
+POL= -1.28
+DESOL= 0.19
+DISP= -0.64
+E= -4.24
+waterdimereda.out
+ES= -9.41
+EX= -8.82
+REP= 16.01
+POL= -1.39
+DESOL= 0.05
+DISP= -1.32
+E= -4.88

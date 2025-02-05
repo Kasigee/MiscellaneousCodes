@@ -1,0 +1,78 @@
+Geometry = GenFormat {
+<<< "in.gen"
+}
+Driver = {}
+Hamiltonian = DFTB {
+SCC = Yes
+SCCTolerance = 1.0e-12
+MaxSCCIterations = 200
+Mixer = Broyden {
+MixingParameter = 0.2
+}
+SlaterKosterFiles = {
+C-C = "/home/ajp/slako/C-C.skf"
+C-N = "/home/ajp/slako/C-N.skf"
+C-O = "/home/ajp/slako/C-O.skf"
+C-H = "/home/ajp/slako/C-H.skf"
+N-C = "/home/ajp/slako/N-C.skf"
+N-N = "/home/ajp/slako/N-N.skf"
+N-O = "/home/ajp/slako/N-O.skf"
+N-H = "/home/ajp/slako/N-H.skf"
+O-C = "/home/ajp/slako/O-C.skf"
+O-N = "/home/ajp/slako/O-N.skf"
+O-O = "/home/ajp/slako/O-O.skf"
+O-H = "/home/ajp/slako/O-H.skf"
+H-C = "/home/ajp/slako/H-C.skf"
+H-N = "/home/ajp/slako/H-N.skf"
+H-O = "/home/ajp/slako/H-O.skf"
+H-H = "/home/ajp/slako/H-H.skf"
+}
+MaxAngularMomentum = {
+C = "p"
+N = "p"
+O = "p"
+H = "s"
+}
+Charge = 0.000000
+SpinPolarisation = {}
+ThirdOrderFull = Yes
+DampXH = Yes
+DampXHExponent = 4.05
+HubbardDerivs {
+C = -0.1492 
+N = -0.1535 
+O = -0.1575 
+H = -0.1857 
+}
+Dispersion = SlaterKirkwood {
+PolarRadiusCharge = HybridDependentPol {
+C = {
+CovalentRadius [Angstrom] = 0.73
+HybridPolarisations [Angstrom^3,Angstrom,] = { 1.382 1.382 1.382 1.064 1.064 1.064 3.8 3.8 3.8 3.8 3.8 3.8 2.50 }
+}
+N = {
+CovalentRadius [Angstrom] = 0.71
+HybridPolarisations [Angstrom^3,Angstrom,] = { 1.030 1.030 1.090 1.090 1.090 1.090 3.8 3.8 3.8 3.8 3.8 3.8 2.82 }
+}
+O = {
+CovalentRadius [Angstrom] = 0.66
+HybridPolarisations [Angstrom^3,Angstrom,] = { 0.560 0.560 0.000 0.000 0.000 0.000 3.8 3.8 3.8 3.8 3.8 3.8 3.15 }
+}
+H = {
+CovalentRadius [Angstrom] = 0.31
+HybridPolarisations [Angstrom^3,Angstrom,] = { 0.386 0.386 0.000 0.000 0.000 0.000 3.5 3.5 3.5 3.5 3.5 3.5 0.80 }
+}
+}
+}
+  Filling = Fermi {
+    Temperature [Kelvin] = 50.0000000
+  }
+}
+
+Options = {
+  CalculateForces = Yes
+}
+
+ParserOptions = {
+  ParserVersion = 3
+}

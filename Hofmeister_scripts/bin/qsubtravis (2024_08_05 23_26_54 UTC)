@@ -1,0 +1,56 @@
+#!/bin/sh
+#
+# Submit a Gaussian 09 job to the grid
+#
+# $1      -- name of input file
+# $2      -- wall time (hours)
+# 
+# Number of processors will be read from the Gaussian input file
+# Memory per processor is 1.8 Gb per node
+#
+# Additional specification in the input line is possible only after supplying walltime in hours
+#
+# First check if the queue exists
+#
+
+#
+# check for the input file
+#
+
+if [ $# -ne 4 ]
+then
+   echo "Usage: $0 ion boxsize solvent wallclocktime (h)"
+   exit 1
+fi
+
+f="$1""$2""$3"
+ion=$1
+boxsize=$2
+solvent=$3
+walltime=$4
+
+# Start creating the input file
+cat <<END >>$f.job
+#!/bin/bash
+#PBS -N $f
+#PBS -q xeon3q
+#PBS -l select=1:ncpus=1:mem=1gb
+#PBS -l walltime=$walltime
+#PBS -r n
+#PBS -k eo
+
+export OMP_NUM_THREADS=1
+ulimit -s unlimited
+
+cd \$PBS_O_WORKDIR
+
+/home/kpg600/Solvation_number/analyse_MD_rcg_NOLATTICEOPT_fixedD3_1fs.sh.bck200714 $ion $boxsize $solvent 
+
+END
+
+# Now submit it.
+qsub $f.job
+rm -f $f.job
+
+exit 0
+

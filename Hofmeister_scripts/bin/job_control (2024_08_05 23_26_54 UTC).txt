@@ -1,0 +1,17 @@
+<periodicity along A, B, and C vectors>
+.false.
+.false.
+.false.
+</periodicity along A, B, and C vectors>
+
+<atomic densities directory complete path>
+/home/kpg600/bin/chargemol_09_26_2017/atomic_densities/
+</atomic densities directory complete path>
+
+<input filename>
+XXXXXXXX.wfx
+</input filename>
+
+<charge type>
+DDEC6
+</charge type>

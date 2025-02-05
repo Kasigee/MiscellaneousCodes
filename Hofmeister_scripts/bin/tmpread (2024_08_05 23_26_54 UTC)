@@ -1,0 +1,34 @@
+#!/bin/bash
+
+#for i in intermediate1 prednisone intermediate2 alfadalone; do for k in 7 8 9 10; do cd ~/luoda/cucurbitural/opt/$k/$i/Converged_geoms/; for j in `ls CB*out | awk -F. '{print $1}'`; do echo $j; parallelTHERM $j; done; done; done
+
+wd1=$PWD
+echo "Energy Readout" > $wd1/EnergyReadout.out
+
+for i in `grep 'Normal termination' */*/*/*3ob.out | awk -F'.out' '{print $1}'`
+do
+ j=`echo $i | awk -F'/' '{print $1"/"$2"/"$3}'`
+ k=`echo $i | awk -F'/' '{print $4}'`
+ echo $j
+ echo $k
+ cd "$wd1"/"$j"/"$k"freq
+  dir=$PWD 
+  mermin=`grep Mermin ../$k.out | tail -n1 | awk '{print $5}'` 
+  ZPE=`head -n1 thermochem.out | awk '{print $NF}'`
+  GFE=`tail -n1 thermochem.out | awk '{print $NF}'`
+  echo "$dir $mermin $ZPE $GFE" >> $wd1/EnergyReadout.out
+ cd $wd1
+done
+
+for i in `grep 'Normal termination' */*/*3ob.out | awk -F'.out' '{print $1}'`
+do
+ j=`echo $i | awk -F'/' '{print $1"/"$2}'`
+ k=`echo $i | awk -F'/' '{print $4}'`
+ cd $wd1/$j/"$k"freq
+ dir=$PWD
+  mermin=`grep Mermin ../$k.out | tail -n1  | awk '{print $5}'`
+  ZPE=`head -n1 thermochem.out | awk '{print $NF}'`
+  GFE=`tail -n1 thermochem.out | awk '{print $NF}'`
+  echo "$dir $mermin $ZPE $GFE" >> $wd1/EnergyReadout.out
+ cd $wd1
+done

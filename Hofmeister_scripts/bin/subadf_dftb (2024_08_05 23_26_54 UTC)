@@ -1,0 +1,29 @@
+#!/bin/bash
+
+#wd=$PWD
+
+#for solv in methanol acetonitrile
+#do
+#cd $wd/$solv/ion_int
+#for ans in F Cl NCS
+# do
+# for k in `seq 1 10`
+# do cp Li/$ans/$k/solvated.out Li/$ans/$k/opt/solvated.out
+# echo "$ans $k"
+# if [ ! -f Li/$ans/$k/opt/opt.xyz ]
+# then echo "making opt.xyz"
+# mv Li/$ans/$k/opt/solvated.out Li/$ans/$k/opt/opt.out
+# adfout-xyz Li/$ans/$k/opt/opt; fi; done; done
+#done
+
+if [ $# -ne 1 ]
+then
+ echo "Usage: $0 job.[xyz]"
+ exit 1
+fi
+
+job=$1
+
+
+adfprep -t /home/ajp/kas/alister_solvated/template.adf -m $job.xyz > $job.run
+sh $job.run "NSCM=/home/ajp/adf2016.104/licence.txt; export NSCM" > $job.out

@@ -1,0 +1,31 @@
+ Geometry = GenFormat {
+ <<< "in.gen"
+ }
+ Driver = ConjugateGradient{
+   MaxSteps = 5000
+ }
+ Hamiltonian = DFTB{
+   Charge = 0
+   SpinPolarisation = {}
+   SCC = Yes
+   SCCTolerance = 1e-6
+   MaxSCCIterations = 500
+   MaxAngularMomentum = { 
+
+   }
+SlaterKosterFiles = Type2FileNames {            # Specifying Slater-Koster files
+        Prefix = "/usr/local/src/slako/3ob-3-1/"
+        Separator = "-"
+        Suffix = ".skf"
+        }
+   ThirdOrderFull = Yes
+   HubbardDerivs = { 
+
+   }
+   Filling = Fermi {
+     Temperature [K] = 298.15
+   }
+   DampXH = Yes
+   DampXHExponent = 4.05
+   Dispersion = {}
+ }

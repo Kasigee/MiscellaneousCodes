@@ -1,0 +1,41 @@
+#!/bin/bash
+
+#for i in intermediate1 prednisone intermediate2 alfadalone; do for k in 7 8 9 10; do cd ~/luoda/cucurbitural/opt/$k/$i/Converged_geoms/; for j in `ls CB*out | awk -F. '{print $1}'`; do echo $j; parallelTHERM $j; done; done; done
+
+#wd=$PWD; for i in `ls */*/*/*3ob.com | awk -F'com' '{print $1}'`; do echo $i;  j=`echo $i | awk -F'/' '{print $1"/"$2"/"$3}'`; k=`echo $i | awk -F'/' '{print $4}'`; cd $wd1/$j; qsubg09 $j 24:00:00; done
+
+
+wd1=$PWD
+
+
+for i in `grep 'Normal termination' */*/*/*3ob.out | awk -F'.out' '{print $1}'`
+do
+ echo $i
+ j=`echo $i | awk -F'/' '{print $1"/"$2"/"$3}'`
+ k=`echo $i | awk -F'/' '{print $4}'`
+ echo $j $k
+ cd $wd1/$j
+	if echo $PWD | grep 'opt/prednisone\|opt/alfadalone\|opt/intermediate1\|opt/intermediate2'
+	then
+	echo bad
+	else
+	 parallelTHERM $k
+	fi
+ cd $wd1
+done
+
+#mv ~/bin/dftb_in.hsd ~/bin/dftb_in2.hsd
+#mv ~/bin/dftb_in4.hsd ~/bin/dftb_in.hsd
+for i in `grep 'Normal termination' */*/*3ob.out | awk -F'.out' '{print $1}'`
+do
+ echo $i
+ 
+ j=`echo $i | awk -F'/' '{print $1"/"$2}'`
+ k=`echo $i | awk -F'/' '{print $3}'`
+ echo $j $k
+ cd $wd1/$j
+ parallelTHERM $k
+ cd $wd1
+done
+#mv ~/bin/dftb_in.hsd ~/bin/dftb_in4.hsd
+#mv ~/bin/dftb_in2.hsd ~/bin/dftb_in.hsd

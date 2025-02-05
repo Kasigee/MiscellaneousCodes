@@ -1,0 +1,26 @@
+#!/bin/bash
+
+if [ $# -ne 2 ]
+then
+  echo "$0 outputfile.out basis"
+ exit 1
+fi
+
+outputname=`echo $1 | awk -F '.' '{print $1".energy.dat"}'`
+rm $outputname
+basis=$2
+
+
+var=`grep "Scan" $1 | head -n1 | awk '{print $3}'`
+
+
+echo "Start Energy Scan"
+echo Energy > $outputname
+for opt in `grep -n "Optimization completed\|Optimization stopped" $1 | awk -F: '{print $1}'`
+do
+Energy=`head -n $opt $1 | grep -n 'E(R'$basis')' | tail -n1 | awk -F = '{print $2}' | awk '{print $1}'`
+Dist=`head -n $opt $1 | grep -n $var | tail -n1 | awk '{print $5}'`
+echo "$Dist $Energy" >> $outputname
+done
+#rm tempcoords.tmp
+#rm sed??????

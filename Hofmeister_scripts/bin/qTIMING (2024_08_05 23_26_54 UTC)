@@ -1,0 +1,35 @@
+#!/bin/bash
+
+if [ $# -ne 1 ]
+then
+ echo "Usage: $0 folder"
+ exit 1
+fi
+
+folder=$1
+jobname=`echo $folder | awk -F'/' '{print $1}'`
+
+cat <<END > $jobname.job
+#!/bin/bash 
+#PBS -N $jobname
+#PBS -l select=1:ncpus=1:mem=1gb
+#PBS -l walltime=1:00:00
+#PBS -k eo
+#PBS -q xeon3q
+
+
+export PATH=$PATH:~/bin/
+export OMP_NUM_THREADS=1
+export USERSCR=\$TMPDIR
+export SCR=\$TMPDIR
+ulimit -s unlimited
+
+cd /home/kpg600/Solvation_number
+
+./timing.sh $folder
+
+END
+
+#do it
+qsub $jobname.job 
+rm -f $jobname.job

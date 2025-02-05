@@ -1,0 +1,12 @@
+#!/bin/bash
+
+for x in F acetate Cl Br NO3 ClO4 SCN NCS
+ do
+ for y in nipam propanamide propanal propane water MeOH MeCN
+  do
+  for z in H2O MeOH MeCN
+   do
+   ./hofmeisterPCMEDA.sh $y $x $z 150 8 8gb 12:00:00
+  done
+ done
+done
