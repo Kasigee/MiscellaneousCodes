@@ -1,0 +1,53 @@
+#!/bin/bash
+
+# detect my semaphores and see which ones are in use
+
+SEMFILE="/tmp/mysems.$$"
+PIDFILE="/tmp/mysempids.$$"
+
+/bin/rm -f $SEMFILE
+/bin/rm -f $PIDFILE
+
+# find all my semaphones
+
+ipcs -s | grep $USER | awk '{print $2}' > $SEMFILE
+
+SEMCOUNT=`wc -l $SEMFILE | awk '{print $1}'`
+if [ "$SEMCOUNT" == "0"  ];
+then
+echo "No Semaphones found for user $USER"
+exit 0
+fi
+
+echo "Found $SEMCOUNT semaphores for user $USER"
+
+# get the PID for each semaphore
+
+for sem in `cat $SEMFILE`
+do
+    ipcs -s -i $sem | grep -v "=" | grep -v "pid" |grep -Ev "^$"| awk -v sem_id=$sem '{print $5","sem_id}' >> $PIDFILE
+done
+
+# check if the PID is running
+
+
+for line in `cat $PIDFILE | sort -u`
+do
+sem_pid=`echo $line | awk -F, '{print $1}'`
+sem_id=`echo $line | awk  -F, '{print $2}'`
+if [ -f /proc/$sem_pid/cmdline ];
+then
+echo "alive pid $sem_pid semid $sem_id"
+else
+# remove the semaphore - will give an error if already removed
+echo "dead pid $sem_pid semid $sem_id"
+ipcrm -s $sem_id
+fi
+
+done
+
+/bin/rm -f $PIDFILE
+/bin/rm -f $SEMFILE
+
+exit
+

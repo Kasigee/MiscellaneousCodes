@@ -1,0 +1,116 @@
+#!/bin/bash
+
+if [ $# -ne 6 ]
+then
+ echo "Usage: $0 job.[inp] ppn node mem(gb) time(hh:mm:ss) series/parallel"
+ exit 1
+fi
+
+job=$1
+cores=$2
+nodes=$3
+mem=$4
+walltime=$5
+mode=$6
+#nodes=2
+PPN=`echo "$cores /$nodes" | bc`
+PMEM=`echo $mem | awk -F'gb' '{print $1}'`
+PMEM2=`echo "$PMEM /$nodes" | bc`
+MPIPROCS=`expr $nodes \* $cores`
+#echo "$PPN $PMEM2"
+#check for files
+qued3=`qstat -u kpg600 | grep xeon3q | wc -l`
+quedcompute=`qstat -u kpg600 | grep computeq | wc -l`
+quedwork=`qstat -u kpg600 | grep workq | wc -l`
+quedmain=`qstat -u kpg600 | grep maintq | wc -l`
+#elif [ $quedmain -lt 2 ] && [ $cores -lt 16 ] 
+#then
+#queue=maintq
+if [ $qued3 -lt 200 ] && [ $nodes -lt 4 ] && [ $cores -le 16 ] && [ $PMEM -lt 128 ]
+then
+#queue=allq
+#queue=xeon4q
+queue=xeon3q
+#queue=workq
+#cores=16
+elif [ $cores -gt 16 ] && [ $cores -lt 32 ] && [ $quedcompute -lt 50 ]
+then
+#queue=computeq
+queue=xeon4q
+#queue=allq
+#cores=16
+elif [ $cores -gt 32 ]
+then
+queue=allq
+#elif  [ $quedwork -lt 3 ] && [ $nodes -lt 4 ] && [ $cores -lt 16 ] && [ $PMEM -lt 128 ]
+#then
+#queue=workq
+elif [ $cores -lt 16 ]
+then
+queue=xeon4q
+else
+queue=allq
+#queue=xeon5q
+#queue=xeon4q
+fi
+rm ~/scratch/$1.dat
+
+if [ $mode == series ]
+then
+cores=1
+fi
+
+for f in $1.inp
+do
+ if [ ! -f $f ]
+ then
+  echo "The file $f does not exist. Job is not submitted."
+  exit 1
+ fi
+done
+
+echo $mem
+
+#PBS -l select=$nodes:ncpus=$ppn:mpiprocs=$MPIPROCS:mem=$mem
+cat <<END > $1.job
+#!/bin/bash 
+#PBS -N $job
+#PBS -l select=$nodes:ncpus=$cores:mem=$mem
+#PBS -l walltime=$walltime
+#PBS -q $queue
+
+#module load intel 
+#module load intel/mkl
+#module load intel/mpi
+
+#module load intel/compiler/64/2018/18.0.3
+#module load intel/mkl/64/2018/3.222
+#module load intel/mpi/64/2018/3.222
+
+module load intel/compiler/64/16.0.8/2016.8.266
+module load intel/mkl/64/11.3.4/2016.8.266
+module load intel/mpi/64/5.1.3/2016.8.266
+#module load intel/mpi/64/2018/3.222 intel/mkl/64/2018/3.222 intel/compiler/64/2018/18.0.3 openbabel/2.3.2 openblas/0.2.19 png/1.6.28 freetype/2.7  hdf5/1.8.16 netcdf/4.4.1.1 geos/3.5.0 ogdi/3.2.0 gdal/2.1.2  openmpi/gcc/64/1.10.7  python/2.7.13 lapack/gcc/64/3.8.0
+
+export PATH=$PATH:~/bin/
+export OMP_NUM_THREADS=1
+export USERSCR=\$TMPDIR
+export SCR=\$TMPDIR
+ulimit -s unlimited
+
+cd \$PBS_O_WORKDIR 
+echo "Job running on \`hostname\`" with $ppn "cores" and $nodes "nodes"
+#for i in \`ipcs -s | awk '{print \$2}'\`; do (ipcrm -s \$i); done
+#kill_ipcs.sh
+/cm/software/apps/gamess/2018.02.14/bin/clearunusedsem
+##~/bin/GKSEDA/rungms_tst $1 03 $cores $nodes 1 >& \$PBS_O_WORKDIR/$job.out
+#~/bin/GKSEDA/rungms_tst $1 00 $cores $nodes 1 >& \$PBS_O_WORKDIR/$job.out 
+##~/bin/GKSEDA/rungms_tst $1 01 $cores $nodes 1 >& \$PBS_O_WORKDIR/$job.out
+~/bin/GKSEDA/rungms_tst $1 04 $cores $nodes 1 >& \$PBS_O_WORKDIR/$job.out
+rm -rf \$TMPDIR/$1.*
+
+END
+
+#do it
+qsub  $1.job 
+rm -f $1.job

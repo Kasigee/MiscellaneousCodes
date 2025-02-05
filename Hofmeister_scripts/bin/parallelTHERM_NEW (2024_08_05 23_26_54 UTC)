@@ -1,0 +1,227 @@
+#!/bin/bash
+#!/usr/bin/perl
+
+
+echo "$0 filename(no .xyz)"
+
+name=$1
+source ~/.bashrc 
+#Kicknumber=`echo $name | awk -F_ '{print $2}' | awk -F'kick' '{print $2}'`
+#echo "Kicknumber=$Kicknumber"
+natoms=`head -n1 $name.xyz | tail -n1 |  tr '\r' ' '`
+echo NATOMS =  $natoms
+
+#Step0. Check the previous run used the correct optimised structure.
+if [ -d "$name"freq ];
+then
+cd "$name"freq
+tail -n$natoms $name > tmpcoords1.tmp
+cp ../$name.xyz .
+cp ../$name.out .
+#out-xyz $name.out $natoms
+tail -n$natoms $name.xyz > tmpcoords2.tmp
+Identical=`cmp --silent tmpcoords1.tmp tmpcoords2.tmp && echo '### Identical ###' || echo '### WARNING: Different! ###'`
+Identical2=`echo $Identical`
+if grep Identical <<< "$Identical2"
+then
+echo Identical
+cd ..
+else
+echo diff
+cd ..
+rm -r "$name"freq
+fi
+fi
+
+
+#Step1
+echo "Step1"
+if [ -e "$name"freq/1x+/detailed.out ]
+then
+echo "Likely Step1 complete. Moving to Step2."
+cd "$name"freq
+#natoms=`head -n1 $name | tr '\r' ' '`
+else
+rm -r "$name"freq
+mkdir "$name"freq
+cd "$name"freq
+cp ~/bin/modes.f .
+cp ~/bin/modes .
+cp ../$name.xyz .
+cp ../$name.gen .
+if echo $PWD | grep 'opt/prednisone\|opt/alfadalone\|opt/intermediate1\|opt/intermediate2' 
+then
+cp ~/bin/dftb_in4.hsd dftb_in.hsd
+else
+cp ~/bin/dftb_in.hsd .
+fi
+sed -i 's/SCCTolerance = 1e-6/SCCTolerance = 1e-12/g' dftb_in.hsd
+sed -i "s/maxatm=XXX/maxatm=$natoms/g" modes.f
+#cp ../$name.out .
+#out-xyz $name.out $natoms
+mv $name.xyz $name
+#cp ../"$name".xyz .
+#cp ../Kick"$Kicknumber".final.xyz $name.xyz
+#mv $name.xyz $name
+/home/ajp/ajp_modes/makexyz < $name
+#natoms=`head -n1 $name | tr '\r' ' '`
+
+#interim fix of dftb_in.hsd
+#awk '{print $1}' $name | tail -n $natoms | sort | uniq >> atomsinfile
+for atom in `sed -n '2 p' $name.gen`
+do
+HD=`grep -w "$atom" -h ~/hofmeister/HubbardDerivs`
+MAM=`grep -w "$atom" -h ~/hofmeister/MaxAngularMomentum`
+#HD=`grep -w -f atomsinfile -h ~/hofmeister/HubbardDerivs`
+#MAM=`grep -w -f atomsinfile -h ~/hofmeister/MaxAngularMomentum`
+#sed -i 's/\/usr\/local\/src\/slako\/3ob-3-1/\/home\/ajp\/slako\/3ob-3-1/g' dftb_in.hsd
+#echo Changing Hubbard Derivatives $HD
+sed -i "s/HubbardDerivs = {/HubbardDerivs = { \n $HD/g" dftb_in.hsd
+sed -i "s/MaxAngularMomentum = {/MaxAngularMomentum = { \n $MAM/g" dftb_in.hsd
+#sed -i "s/RANDOM/$RANDOM/g" dftb_in.hsd
+#perl -p -i -e "s/HubbardDerivs {/HubbardDerivs { \n$HD/g" dftb_in.hsd
+#perl -p -i -e "s/MaxAngularMomentum = {/MaxAngularMomentum = { \n$MAM/g" dftb_in.hsd
+#rm atomsinfile
+done
+fi
+
+#Step2
+echo "Step2"
+if [ -e 1x+/detailed.out ]
+then
+echo "Likely Step2 already complete. Moving onto Step3"
+else
+/home/kpg600/bin/qdftb.sh
+fi
+
+#qplus=`qstat -u kpg600 | grep + | wc -l`
+
+#while [ $qplus -ge 1 ]
+#do
+#echo "pluses still qued, $qplus pluses still in que"
+#sleep 10
+#qplus=`qstat -u kpg600 | grep + | wc -l`
+#done
+
+#qminuspre=`qstat -u kpg600 | grep - | wc -l`
+#qminus=`expr $qminuspre - 1`
+#while [ $qminus -ge 1 ]
+#do
+#echo "minuses still qued, $qminus minuses still in que"
+#sleep 10
+#qminuspre=`qstat -u kpg600 | grep - | wc -l`
+#qminus=`expr $qminuspre - 1`
+#done
+
+#Step3
+echo "Step3"
+if [ -f 1x+.frc ]
+then
+echo "Likely Step3 Complete. Moving onto Step4"
+else
+/home/ajp/ajp_modes/dftbfrc.sh $natoms
+fi
+
+#Step4
+echo "Step4"
+module purge
+#module load lapack/3.7.0 blas intel/mkl intel/compiler
+module load lapack blas intel/mkl intel/compiler
+ifort -traceback -mcmodel=large -o modes modes.f -llapack -lblas -lgfortran
+source ~/.bashrc
+
+#Step5
+echo "Step5"
+wd=$PWD
+if [ -f modes.opt ]
+then
+echo "Likely Step5 Complete. Moving onto Step 6"
+else
+$wd/modes < $name > modes.opt
+fi
+
+firstsix=`head modes.opt | tail -n6 | awk -F. '{print $1}'`
+# do an if any of first 6 lines not in range say (-20 to +20), report this. else delete those lines for thermochem.in
+for i in $firstsix
+do
+echo $i
+ if [ $i -le -300 ]
+ then
+ echo "$i is less than -300. Exiting. Likely the structure is not good."
+# exit 0
+ elif [ $i -ge 20 ]
+ then
+ echo "$i is greater than 20"
+ exit 0
+ else
+ echo "Looks like frequency is fine?"
+ fi
+done
+echo "deleting first 6 lines of modes.opt"
+numberoflines=`wc -l modes.opt | awk '{print $1}'`
+nummodes=`expr $numberoflines - 10`
+modes=`tail -n$nummodes modes.opt | tr '\n' ' ' | sed 's/      / /g' | sed 's/     / /g' | sed 's/   / /g' | sed 's/  / /g' `
+#cp $name $name.xyz
+#xyz-com $name.xyz
+#rm $name.xyz
+#sed -i 's/%k l301/%nproc=4/g' $name.com
+#sed -i 's/#p opt am1/#n am1 freq/g' $name.com
+#sed -i '2i %mem=2gb' $name.com
+#awk '{print $1,$2,$3,$4}' $name.com > $name.tmp
+#cat $name.tmp > $name.com
+#rm $name.tmp
+
+#if [ -f $name.log ]
+#then
+#echo "$name.log exists. Likely this already ran"
+#else
+#echo "Running a quick frequency calc for parameters"
+#g09 < $name.com > $name.log
+#fi
+#mass=`grep "Molecular mass:" $name.log | awk '{print $3}'`
+#rotsym=`grep " Rotational symmetry number" $name.log | awk '{print $4}'`
+
+echo "Checking input temp and mass"
+temperature=`grep "Temp" dftb_in.hsd | awk -F'=' '{print $2}'`
+echo "Temp = $temperature"
+numO=`grep "O" $name | wc -l`
+numC=`grep "C" $name | wc -l`
+numH=`grep "H" $name | wc -l`
+numN=`grep "N" $name | wc -l`
+mass=`echo "$numO*15.999 + $numC*12.0107 + $numH*1.00794 + $numN*14.0067" | bc`
+echo $mass
+rotsym=1
+echo "Calculating moments of inertia"
+rotxGHZ=`grep "Rotational constants" ../$name.out | tail -n1 | awk '{print $4}'`
+rotyGHZ=`grep "Rotational constants" ../$name.out | tail -n1 | awk '{print $5}'`
+rotzGHZ=`grep "Rotational constants" ../$name.out | tail -n1 | awk '{print $6}'`
+moix=`echo "scale=60;(6.626*10^(-27))/(8*3.14159^2*3*10^8*(0.0333564095198152*$rotxGHZ))*6.022045*10^37" | bc -l | sed 's/0000//g'`
+moiy=`echo "scale=60;(6.626*10^(-27))/(8*3.14159^2*3*10^8*(0.0333564095198152*$rotyGHZ))*6.022045*10^37" | bc -l | sed 's/0000//g'`
+moiz=`echo "scale=60;(6.626*10^(-27))/(8*3.14159^2*3*10^8*(0.0333564095198152*$rotzGHZ))*6.022045*10^37" | bc -l | sed 's/0000//g'`
+
+echo "Making thermochem.in"
+echo "$temperature 1.0  #temperature (k), pressure (atm)" > thermochem.in
+echo "1 #electronic degeneracy" >> thermochem.in
+echo "$mass $moix $moiy $moiz $rotsym #mass, moments of inertia (x,y,z), rotational symmetry no." >> thermochem.in
+echo "$nummodes $modes" >> thermochem.in
+
+echo "Step 7. Thermochem"
+thermochem < thermochem.in > thermochem.out
+cat thermochem.out
+zpcE=`grep "Zero-point correction to Energy" thermochem.out | awk -F'=' '{print $2}'`
+tcE=`grep "Thermal correction to Energy" thermochem.out | awk -F'=' '{print $2}'`
+tcH=`grep "Thermal correction to Enthalpy" thermochem.out | awk -F'=' '{print $2}'`
+tcG=`grep "Thermal correction to Gibbs Free Energy" thermochem.out | awk -F'=' '{print $2}'`
+
+tMFE=`grep "Total Mermin free energy" ../$name.out | awk -F':' '{print $2}' | awk '{print $1}' | tail -n1`
+#tMFE2=`grep "Total Mermin free energy" ../Kick"$Kicknumber".detailed.out | awk -F':' '{print $2}' | awk '{print $1}'`
+CorE=`echo "$tMFE + $tcG" | bc -l`
+CorEkcal=`echo "$CorE*627.5095" | bc -l`
+CorEJ=`echo "$CorEkcal*4184" | bc -l`
+
+echo "$name"
+$PWD
+echo "Total_Mermin_FE Themal_corr_G Corr_E"
+echo "$tMFE $tcG $CorE  Hartree $CorEkcal kcal/mol $CorEJ Joule/mol"
+echo "$date $PWD $tMFE $tcG $CorE  Hartree $CorEkcal kcal/mol $CorEJ Joule/mol" >> ~/bin/parallelTHERM.out
+

@@ -1,0 +1,48 @@
+#!/bin/bash
+
+if [ $# -ne 5 ]
+then
+ echo "Usage: $0 job.[inp] ppn node mem(gb) time(hh:mm:ss)"
+ exit 1
+fi
+
+
+job=$1
+cores=$2
+nodes=$3
+mem=$4
+walltime=$5
+
+for f in $1.inp
+do
+ if [ ! -f $f ]
+ then
+  echo "The file $f does not exist. Job is not submitted."
+  exit 1
+ fi
+done
+
+cat <<END > $1.job
+#!/bin/bash
+#PBS -l select=1:ncpus=$cores:mem=$mem
+#PBS -l walltime=$walltime
+#PBS -k oe
+#PBS -q xeon5q
+ 
+source /etc/profile.d/modules.sh
+module purge
+module load gamess/2018.02.14
+
+cd \$PBS_O_WORKDIR
+ 
+echo "Tempdir = \$TMPDIR"
+ 
+rungms  $job 00 \$NCPUS 1 >& \$PBS_O_WORKDIR/$job.out 
+
+
+END
+
+#do it
+qsub  $1.job
+#rm -f $1.job
+

@@ -1,0 +1,805 @@
+#!/usr/bin/perl -s
+###
+#### Author: Matt Addicoat
+#### 05 April 2007 
+#### Modified 17 Feb 2011: parse DFTB+ runs
+#### Modified 12 Apr 2011: parse modified (parallel) DFTB+ runs
+#
+## Script to parse and summarise output from a Kick run 
+#
+
+# Modified to match with Kick-pll-dftb.pl that keeps only xyz files (assuming you'll redo any interesting structs in detail)
+
+use File::chdir;
+use File::ReadBackwards;
+#use Math::MatrixReal;
+#use Data::Dumper ;
+
+$Input="Kick.in";
+$SysInput="System.in";
+$Unordered_Energies_File ="Unordered_Energies.out";
+$Ordered_Energies_File="Ordered_Energies.out";
+$Unique_Energies_File="Unique_Energies.out";
+$Ring_output_File="Rings.out";
+$Summary_File="Summary.out";
+$Geometries_File="Geometries.out";
+$LaTeX_File="LaTeX_Table.tex";
+$SaveDir="Converged_geoms";
+$Restart="Restart.data";
+$BE_File="BE_system.txt";
+
+#Thresholds
+$thresh_bb=1.0;
+$thresh_ss=1.0;
+$thresh_bs=1.0;
+
+#$BE_File="MFE_system.txt";
+#if(-e $BE_File)
+#{
+#   open (BE,"$BE_File");
+#   $BE_sys = <BE>;
+#   chomp $BE_sys;
+#}
+#else
+#{
+#   undef($BE_sys);
+#}
+
+parse_input($Input); #This is a cut down version of the equivalent sub in CL All we need to know is the program used
+#print "Program used is $Program\n";
+#To calc the BE per atom, we need to read in the system here
+parse_system($SysInput);
+$BE_sys=0;
+foreach $elem (keys %system)
+{
+   $BE_sys += ${$system{$elem}{'NumberOf'}} * ${$system{$elem}{'Energy'}};
+}
+print "BE_sys= $BE_sys\n";
+
+#$eps_d=0.2; #for distance-based same_mol test
+$eps_d=0.15; #for distance-based same_mol test
+$eps_q=0.02; #for charge-based same_mol test
+
+$eps=$eps_d;
+
+#Hash a Periodic Table
+PT(); 
+#print Dumper(\%elements);
+#print "$elements{Rh}{anum}\n";
+#print "$elements_ANum{11}{symbol} \n";
+#exit;
+
+#For the dftb case, all successful geom opts are pre-sorted into a subdir called "Converged_geoms"
+#if gaussian was used, we need to do this now
+
+#We'll also set extensions here
+
+if($Program eq "gaussian")
+{
+   $extn="out";
+   @Grep_Normal = `grep -l Normal Kick????.out`;
+   foreach $Job_id (@Grep_Normal)
+   {
+      #separate step allows parsing to occur all in the SaveDir   
+      chomp $Job_id;
+     `mv $Job_id $SaveDir`;
+   }
+}
+elsif($Program eq "dftb")
+{
+   $extn="out";
+}
+else
+{
+   die "Only programs supported so far are gaussian and dftb\n";
+}
+
+
+#First run the ring program on all successful jobs
+#do_rings();
+
+#Now that anything that finished Normally is in the SaveDir we carry on as usual
+
+@Outputs = `ls $SaveDir/Kick????.$extn`;
+#print "$SaveDir/Kick????.$extn\n";
+#print "@Grep_Normal";
+foreach $Job_id (@Outputs)
+{
+	$_ = $Job_id;
+   s/(\s*$SaveDir\/)(Kick)(\d+)(\.$extn)/\3/;	
+   chomp $_;
+	push(@Successful_Jobs, $_);
+}
+$Number_successful_jobs = @Successful_Jobs;
+#print "$Number_successful_jobs \n"; 
+
+open (RESTART,"$Restart");
+$AlreadyDone = <RESTART>;
+$Number_of_jobs= $AlreadyDone+1;
+
+
+#Create a file with the energies of all successful jobs
+
+open(UNORDERED,">$Unordered_Energies_File");
+
+# Get the final energy 
+foreach $Job (@Successful_Jobs)
+{
+   $output_file="Kick$Job.$extn";	
+   get_final_energy($output_file);
+	print UNORDERED "$Energy\t$Job\n";
+	$Energy =sprintf '%.5f', $Energy;
+	push(@List_of_Energies,$Energy);	
+   #print "$Job\t$Energy\n";
+}
+close UNORDERED;
+
+
+@Energies{@Successful_Jobs} = @List_of_Energies;
+
+#foreach (sort keys %Energies){
+#	print " $Energies{$_} <= $_ \n";
+#}
+
+#sort by values
+open(ORDERED_E,">$Ordered_Energies_File");
+
+foreach (sort {$Energies{$a} cmp $Energies{$b} } keys %Energies)
+{
+	#$E =sprintf '%.5f', $Energies{$_};
+	print ORDERED_E "$Energies{$_}\t$_\n";
+	push(@Ordered_List_of_Filenames,$_);
+	push(@Ordered_List_of_Energies,$Energies{$_});
+	#print ORDERED_E "$E\t$_\n";
+}
+close ORDERED_E;
+
+# remove duplicates
+
+open(ORDERED_E,"$Ordered_Energies_File");
+while(<ORDERED_E>)
+{
+	($E,$File_number) = split '\t';
+	chop $File_number;
+	#print "$E";
+	$Unique_E{$E} = $File_number;
+}
+	
+$Number_Unique_Energies=scalar(keys %Unique_E);
+$Lowest_E = (sort keys %Unique_E)[-1];
+#print "$Lowest_E";
+
+#while (my ($key, $value) = each(%Unique_E))
+#{
+#	print UNIQUE_E "$key\t$value\n";
+#}
+if($Program eq "gaussian") 
+{
+   foreach (reverse sort keys %Unique_E)
+   {
+      get_geometry_gaussian($Unique_E{$_}) ;
+   }
+}
+
+#We need two things here:
+# 1. An array with the numbers of energy unique jobs (such that we can destroy elements of it)
+# 2. a reversed Unique_E hash (still unique as job numbers are unique) to look up energies from job no
+
+@nrg_unique=();
+foreach (reverse sort keys %Unique_E)
+{
+   push(@nrg_unique,$Unique_E{$_});
+}
+
+%E_euqinU= reverse %Unique_E;
+
+{ #bare block
+local $CWD ="$SaveDir";
+chdir $CWD;
+print "@nrg_unique\n";
+OUTER:for(my $n=0;$n<$#nrg_unique;$n++)
+{
+   $same=0;
+   if(defined($nrg_unique[$n]))
+   {
+      $mol_1=$nrg_unique[$n];
+      INNER:for(my $m=$n+1;$m<=$#nrg_unique;$m++)
+      {
+         if(defined($nrg_unique[$m]))
+         {
+            $mol_2=$nrg_unique[$m];
+            my $DE = $E_euqinU{$mol_2} - $E_euqinU{$mol_1}; #always positive this way
+            #print "$mol_1\t$mol_2\t$E_euqinU{$mol_1}\t$E_euqinU{$mol_2}\t$DE\n";
+            if($DE<0.001) # 
+            {
+               #print "$mol_1\t$mol_2\t";
+               $rmsd_string=`frag_rmsd Kick$mol_1.final.xyz Kick$mol_2.final.xyz`;
+               #print "$rmsd_string\n";
+               ($rmsd_bb,$rmsd_ss,$rmsd_bs)=split ' ',$rmsd_string;
+               if($rmsd_bb<$thresh_bb)
+               {
+                  if($rmsd_ss<$thresh_ss)
+                  {
+                     if($rmsd_bs<$thresh_bs)
+                     {
+                        $same=1;
+                     }
+                  }
+               }
+               #$same=same_mol(\@{$ClusterDefn{$mol_1}},\@{$ClusterDefn{$mol_2}});
+               if($same==1)
+               {
+                  print "$mol_1 and $mol_2 are geometrically the same\n";
+                  #`rm $SaveDir/Kick$mol_2.detailed.out`;
+                  #`rm $SaveDir/Kick$mol_2.final.xyz`; #Not removing Kick$mol_2.out as it would mess up the stats for later runs
+		  #          `rm Kick$mol_2.e*`; #PBS
+		  #          `rm Kick$mol_2.o*`; #PBS
+                  undef $nrg_unique[$m];
+               }
+            }
+         }
+      }
+   }
+}
+} #end bare block
+print "@nrg_unique\n";
+
+
+#Update the number of unique geoms:
+
+@geo_unique= grep { defined } @nrg_unique;
+$Number_Unique_Energies=scalar(@geo_unique);
+
+open(UNIQUE_E,">$Unique_Energies_File");
+#open(GEOM,">$Geometries_File");
+
+foreach (@geo_unique)
+{
+   print UNIQUE_E "$_ \t$Unique_E{$_}\n";
+}
+
+close UNIQUE_E;
+#close GEOM;
+# Dump Energies and geometries to a file
+
+# Create a summary
+
+$Percent_success = sprintf '%.2f',(($Number_successful_jobs/$Number_of_jobs)*100);
+$Percent_unique = sprintf '%.2f',(($Number_Unique_Energies/$Number_of_jobs)*100);
+
+#open(RING_REC,">$Ring_output_File");
+open(SUMMARY,">$Summary_File");
+($sec,$min,$hour,$mday,$mon,$year,$wday,
+	$yday,$isdst)=localtime(time);
+
+printf SUMMARY "%4d-%02d-%02d %02d:%02d:%02d\n\n",
+$year+1900,$mon+1,$mday,$hour,$min,$sec;
+
+print SUMMARY "In this Kick run, there were $Number_of_jobs  jobs run.\n";
+print SUMMARY "Of which $Number_successful_jobs ($Percent_success\%) terminated normally.\n";
+print SUMMARY "$Number_Unique_Energies ($Percent_unique\%) of these jobs gave unique energies (5 dp).\n\n";
+print SUMMARY "The Unique Energies were:\n";
+
+#foreach (sort keys %Unique_E)
+foreach (reverse @geo_unique)
+{
+   #$rng_file="Kick$Unique_E{$_}.rng";
+   #@ring_array = grab_rings($rng_file);
+   $Delta_E = sprintf '%.3f',(($E_euqinU{$_}-$Lowest_E)*27.2116); #in eV
+   if(defined($BE_sys))
+   {
+      $Binding_E = sprintf '%.3f',(($BE_sys-$E_euqinU{$_})*27.2116); #in eV
+	   print SUMMARY "$E_euqinU{$_}\t $Delta_E\t $Binding_E\t $_\n";
+   }
+   #$Delta_E = sprintf '%.2f',(($_-$Lowest_E)*2625.5); #in kJ/mol 
+   else
+   {
+	   print SUMMARY "$E_euqinU{$_}\t $Delta_E\t $_\n";
+   }
+   #print RING_REC "$Unique_E{$_}\t $_\t $Delta_E \t@ring_array\n";
+}
+
+close SUMMARY;
+#close RING_REC;
+`cp $Summary_File $Summary_File.$Number_of_jobs`;
+
+
+
+sub grab_geom
+{
+   undef @Geom;
+   #print "SUB: $_[0]\n";	
+   local $CWD ="$SaveDir";
+   chdir $CWD;
+   $geomfile=$_[0];
+   open($GEOM,"$geomfile") or die("Cannot open $geomfile for reading\n");
+   my @stuff=<$GEOM>;
+   close($GEOM);
+   foreach my $line(2 .. $#stuff)
+   {
+      ($atom,$x,$y,$z,$q)=split(' ',$stuff[$line]);
+      #print "$atom,$x,$y,$z,$q\n";
+      $tmp=join(' ',$atom,$x,$y,$z);
+      #print "$tmp\n";
+      push(@Geom,$tmp)
+   }
+
+	return @Geom
+}
+
+sub get_centroid
+{
+   $fragref=shift;
+   @frag=@{$fragref};
+   #First determine the sum of atomic numbers
+   $asum=0;
+   $xsum=0;
+   $ysum=0;
+   $zsum=0;
+   @centroid=();
+   foreach $cline (@frag)
+   {
+      @Cartesians = split(' ', $cline);
+      ($Atom_label, @orig_xyz) = @Cartesians;
+      #print "$Atom_label\t$elements{$Atom_label}{anum}\n";
+      $asum+=$elements{$Atom_label}{anum};
+      $xsum+=$elements{$Atom_label}{anum}*$orig_xyz[0];
+      $ysum+=$elements{$Atom_label}{anum}*$orig_xyz[1];
+      $zsum+=$elements{$Atom_label}{anum}*$orig_xyz[2];
+   }
+   #print "$xsum\t $ysum\ $zsum\n";
+   $centroid[0]= sprintf '%.6f',$xsum/$asum;
+   $centroid[1]= sprintf '%.6f',$ysum/$asum;
+   $centroid[2]= sprintf '%.6f',$zsum/$asum;
+
+   return @centroid;
+
+}
+
+sub bond_dist
+{
+   $atom1=shift;
+   $atom2=shift;
+   @tmp1=split(' ', $atom1);
+   @tmp2=split(' ', $atom2);
+   $bdist=sqrt( ($tmp1[1]-$tmp2[1])**2 + ($tmp1[2]-$tmp2[2])**2 + ($tmp1[3]-$tmp2[3])**2);
+   #print "@tmp1 , @tmp2, $bdist\n";
+   return $bdist;
+}
+
+sub mol_vect
+{
+   $fragref=shift;
+   @frag=@{$fragref};
+   undef @mol_vect;
+   undef @sorted;
+   @centroid=();
+   @centroid= get_centroid(\@frag);
+   $this_centre=join(' ',X,@centroid,"\n");
+   #print "@centroid\n";
+   foreach $atom (@frag)
+   {
+      my $bdist=bond_dist($this_centre,$atom);
+      @Cartesians = split(' ', $atom);
+      ($alab, @orig_xyz) = @Cartesians;
+      @tmp= ($bdist,$alab);
+      #print "@tmp\n";
+      push @mol_vect, [@tmp];
+   }
+   #print "@mol_vect\n";
+   @sorted = sort { $a->[0] <=> $b->[0] } @mol_vect;
+   return @sorted;
+   #return @mol_vect;
+}
+
+sub mol_q
+{
+   $fragref=shift;
+   @frag=@{$fragref};
+   undef @qvect;
+   foreach $atom (@frag)
+   {
+      @Cartesians = split(' ', $atom);
+      (my $alab,my $x, my $y, my $z, my $q) = @Cartesians;
+      @tmp=($q,$alab);
+      push @qvect, [@tmp];
+   }
+   print "@qvect\n";
+   @sorted= sort { $a->[0] <=> $b->[0] } @qvect;
+   return @sorted;
+}
+   
+
+sub same_mol
+{
+   $mol1ref = shift;
+   $mol2ref = shift;
+   @mol_1=@{$mol1ref};
+   @mol_2=@{$mol2ref};
+
+   my $same=0;
+   if($#mol_1 != $#mol_2)
+   {
+      #print "SM: exit 1\n";
+      return $same;
+   }
+   for ($n=0;$n<=$#mol_1;$n++)
+   {
+      if(sqrt(($mol_1[$n][0]-$mol_2[$n][0])**2)>$eps)
+      {
+         #print "SM: exit 2\n";
+         return $same;
+      }
+      #elsif($mol_1[$n][1] ne $mol_2[$n][1]) #hashed out because nor sensitive to small diff
+      #{
+         #print "SM: exit 3: $n  $mol_1[$n][1],$mol_2[$n][1]\n";
+         #return $same;
+      #}
+   }
+   $same=1;
+   #print "SM: exit 4\n";
+   return $same;
+}
+
+#doesn't work
+#sub do_rings
+#{
+#   local $CWD ="$SaveDir";
+#   chdir $CWD;
+#   print "doing rings\n";
+#   print "$CWD";
+#
+#   `for f in geo_end*xyz;do echo $f;ring $f 1;done`;
+#}
+
+sub grab_rings
+{
+   undef @rings;
+   #print "SUB: $_[0]\n";	
+   local $CWD ="$SaveDir";
+   chdir $CWD;
+   $ringfile=$_[0];
+   open($RING,"$ringfile");# or die("Cannot open $ringfile for reading\n");
+   my $stuff=<$RING>;
+   close($RING);
+   @rings=split ' ', $stuff;
+
+	return @rings
+}
+
+
+sub check_headers
+{
+    $Headerfile = $_[0];
+    open(HEADER,"$Headerfile") or die "Unable to open $Header";
+    @HeaderLines = <HEADER>;
+    while ($HLine = shift (@HeaderLines))
+    {
+        if ($HLine =~ /mp2/i) #find the checkpoint file line
+        {
+           $scf=0; 
+        }
+    }
+    close HEADER;
+}
+
+sub get_final_energy
+{
+   if($Program eq "gaussian")
+   {
+      #print "In GFE $_[0]\n";
+      get_final_energy_gaussian($_[0]);
+   }
+   elsif($Program eq "dftb")
+   {
+      get_final_energy_dftb($_[0]);
+   }
+}
+
+sub get_final_energy_gaussian
+{
+   $job=$_[0];
+   # only deals with something that has an "SCF Done" line i.e. not MP2 or higher
+   @Grep_SCF = `grep "SCF Done" $SaveDir/$job `;
+   $LastLine = pop(@Grep_SCF);
+   #print "$LastLine";
+   @LastLine_Bits = split ' ',$LastLine;
+   $Energy = $LastLine_Bits[4];
+   #print "$Energy\n";
+}
+
+sub get_final_energy_dftb
+{
+   #print "SUB:$_[0]\n";
+   $job=$_[0];
+   @Grep_TE = `grep "Total Energy" $SaveDir/$job `;
+   $LastLine = pop(@Grep_TE);
+   #print "$LastLine";
+   @LastLine_Bits = split ' ',$LastLine;
+   $Energy = $LastLine_Bits[2];
+}
+
+sub get_geometry_gaussian
+{
+   #print "Getting gaussian geom $job_no\n";
+   $job_no=$_[0];
+   $file_to_read="$SaveDir/Kick$job_no.$extn";
+   $file_to_write="$SaveDir/Kick$job_no.final.xyz";
+   open($GAU_XYZ,">$file_to_write") or die "Couldn't open $file_to_write for writing\n";
+   @SO = grab_standard_orientation($file_to_read);
+   $length = @SO;
+   #print "$length \n $SO[0]\n";
+   print $GAU_XYZ "$length\n";
+   print $GAU_XYZ "Kick$job_no final coordinates\n";
+   foreach $Line (@SO)
+   {
+      #print $Line;
+      @stuff = split '\s+', $Line;
+      $AtomicNumber = $stuff[2];
+      $x_coord = $stuff[4];
+      $y_coord = $stuff[5];
+      $z_coord = $stuff[6];
+      #"$elements_ANum{$AtomicNumber}{symbol}\t$x_coord\t$y_coord\t$z_coord\t0.0\n"; #we add the zero as charge, such that find_frags can deal with it
+      printf $GAU_XYZ "%-3s%13.6f%13.6f%13.6f%8.1f\n",$elements_ANum{$AtomicNumber}{symbol},$x_coord,$y_coord,$z_coord,0;
+   }
+   #open(SO,"geom");
+   #@SOlines = <SO>;
+   #while ($SOline = shift (@SOlines))
+   #{
+#  }
+   print $GAU_XYZ "\n";
+   close $GAU_XYZ; 
+}
+
+sub grab_standard_orientation
+{
+   $logfile=$_[0];
+   #print "$logfile\n";
+   undef $bw;
+   @Standard_Orientation =();
+   #open(SO,">geom");
+   $bw = File::ReadBackwards->new( $logfile ) or die "can't read $logfile" ;
+   #print "Reading: $logfile\t $bw\n";
+   while( defined( $log_line = $bw->readline ) )
+   {
+      push(@lines,$log_line);
+   }
+      while ($line = shift (@lines))
+      {
+         last if ($line =~ /\sRotational/)
+      }
+      #$line = shift (@lines); #shift one line (the ------etc line)
+      while ($line = shift (@lines))
+      {
+         last if ($line =~ /\sNumber/);
+         #print SO "$line";
+         #print $line;
+         if ($line !~ /\s----------/)
+         {
+            #print $line;
+            push(@Standard_Orientation,$line);
+         }
+      }
+      while($line = shift (@lines))
+      {
+         #do nothing until eof
+      }
+   return @Standard_Orientation;
+}
+
+#read in the system
+sub parse_system
+{
+   $Sys_file=$_[0];
+   open($SYSIN,"$Sys_file") or die "Unable to open system input file: $Sys_file\n";
+   #@syslines=<$SYSIN>;
+   #foreach $sysline (@syslines)
+   while (<$SYSIN>)
+   {
+      #print $_;
+      if(/^Atoms/i .. /^End/i)
+      {
+         if (/\w+\s+\d+/)
+         {
+            ($atom,$number_of_atype,$nrg)=split(' ',$_);
+            #print "$number_of_atype\t$atom\n";
+            $natom=$natom+$number_of_atype;
+            ${$system{$atom}{'Energy'}}=$nrg;
+            ${$system{$atom}{'NumberOf'}}=$number_of_atype;
+            ${$system{$atom}{'Type'}}="atom";
+         }
+      }
+      elsif(/^Frag/i ../^End/i)
+      #Need to open each fragment file and determine it's length
+      {
+         if (/\w+\s+\d+/)
+         {
+            ($frag,$number_of_ftype,$flex_frag,$nrg)=split(' ',$_);
+            push(@list_of_fragments,$frag);
+            $atoms_this_frag=0;
+            #$FragCoords{$frag} = [ get_coords($frag) ];
+            $atoms_this_frag=@{$FragCoords{$frag}} ;
+            $natom=$natom+($atoms_this_frag*$number_of_ftype);
+            ${$system{$frag}{'Energy'}}=$nrg;
+            ${$system{$frag}{'NumberOf'}}=$number_of_ftype;
+            ${$system{$frag}{'Type'}}="fragment";
+            #print "$number_of_ftype\t$frag\n";
+            #die("Fragments not implemented yet\n")
+         }
+      }
+   }
+}
+
+#parse input as a bunch of keyword pairs
+#All we need is the program used
+sub parse_input
+{
+   $Input_file=$_[0];
+   open($KICK, "$Input_file") or die "Unable to open main input file:$Input_file\n";
+   @lines = <$KICK>;
+   foreach $input_line (@lines)
+   {
+      if($input_line =~ /=/)
+      {
+         $keyword=$`;
+         $value=$';
+         chomp $value;
+         if($keyword =~ /^prog/i)
+         {
+            if($value =~ /(gau|g09|g03)/i)
+            {
+               $Program="gaussian";
+            }
+            elsif($value =~ /dftb/i)
+            {
+               $Program="dftb";
+            }
+            else
+            {
+               die "Only programs supported so far are gaussian and dftb\n";
+            }
+         }
+      }
+   }
+   #Check that all the essential stuff is here
+   die "program not defined: specify gaussian or dftb \n" unless defined($Program);
+}
+
+sub PT
+{
+   my @fields = qw(anum symbol element weight);
+
+   # build the hash table
+   foreach (<DATA>)
+   {
+      chomp;
+
+      my %element;
+      @element{@fields} = (split /,/);
+      #print "$element{anum}\n";
+      $elements{$element{symbol}} = \%element;
+      $elements_ANum{$element{anum}} = \%element;
+   }
+}
+# format: atomicNumber, name, symbol, weight
+__DATA__
+1,H,Hydrogen,1.00794
+2,He,Helium,4.002602
+3,Li,Lithium,6.941
+4,Be,Beryllium,9.012182
+5,B,Boron,10.811
+6,C,Carbon,12.0107
+7,N,Nitrogen,14.0067
+8,O,Oxygen,15.9994
+9,F,Fluorine,18.9994
+10,Ne,Neon,20.1797
+11,Na,Sodium,22.98976928
+12,Mg,Magnesium,24.305
+13,Al,aluminium,26.9815386
+14,Si,Silicon,28.0855
+15,P,Phosphorus,30.973762
+16,S,Sulphur,32.065
+17,Cl,Chlorine,35.453
+18,Ar,Argon,39.948
+19,K,Potassium,39.0983
+20,Ca,Calcium,40.078
+21,Sc,Scandium,44.955912
+22,Ti,Titanium,47.867
+23,V,Vanadium,50.9415
+24,Cr,Chromium,51.9961
+25,Mn,Manganese,54.938045
+26,Fe,Iron,55.845
+27,Co,Cobalt,58.933195
+28,Ni,Nickel,58.6934
+29,Cu,Copper,63.546
+30,Zn,Zinc,65.38
+31,Ga,Gallium,69.723
+32,Ge,Germanium,72.64
+33,As,Arsenic,74.9216
+34,Se,Selenium,78.96
+35,Br,Bromine,79.904
+36,Kr,Krypton,83.798
+37,Rb,Rubidium,85.4678
+38,Sr,Strontium,87.62
+39,Y,Yttrium,88.90585
+40,Zr,Zirkonium,91.224
+41,Nb,Niobium,92.90638
+42,Mo,Molybdaenum,95.96
+43,Tc,Technetium,98
+44,Ru,Ruthenium,101.07
+45,Rh,Rhodium,102.9055
+46,Pd,Palladium,106.42
+47,Ag,Silver,107.8682
+48,Cd,Cadmium,112.411
+49,In,Indium,114.818
+50,Sn,Tin,118.71
+51,Sb,Antimony,121.76
+52,Te,Tellurium,127.6
+53,I,Iodine,126.90447
+54,Xe,Xenon,131.293
+55,Cs,Cesium,132.9054519
+56,Ba,Barium,137.327
+57,La,Lanthanum,138.90547
+58,Ce,Cerium,140.116
+59,Pr,Praseodymium,140.90765
+60,Nd,Neodymium,144.242
+61,Pm,Promethium,145
+62,Sm,Samarium,150.36
+63,Eu,Europium,151.964
+64,Gd,Gadolinium,157.25
+65,Tb,Terbium,158.92535
+66,Dy,Dysprosium,162.5001
+67,Ho,Holmium,164.93032
+68,Er,Erbium,167.259
+69,Tm,Thulium,168.93421
+70,Yb,Ytterbium,173.054
+71,Lu,Lutetium,174.9668
+72,Hf,Hafnium,178.49
+73,Ta,Tantalum,180.94788
+74,W,Tungsten,183.84
+75,Re,Rhenium,186.207
+76,Os,Osmium,190.23
+77,Ir,Iridium,192.217
+78,Pt,Platinum,192.084
+79,Au,Gold,196.966569
+80,Hg,Hydrargyrum,200.59
+81,Tl,Thallium,204.3833
+82,Pb,Lead,207.2
+83,Bi,Bismuth,208.980401
+84,Po,Polonium,210
+85,At,Astatine,210
+86,Rn,Radon,220
+87,Fr,Francium,223
+88,Ra,Radium,226
+89,Ac,Actinium,227
+90,Th,Thorium,232.03806
+91,Pa,Protactinium,231.03588
+92,U,Uranium,238.02891
+93,Np,Neptunium,237
+94,Pu,Plutonium,244
+95,Am,Americium,243
+96,Cm,Curium,247
+97,Bk,Berkelium,247
+98,Cf,Californium,251
+99,Es,Einsteinium,252
+100,Fm,Fermium,257
+101,Md,Mendelevium,258
+102,No,Nobelium,259
+103,Lr,Lawrencium,262
+104,Rf,Rutherfordium,261
+105,Db,Dubnium,262
+106,Sg,Seaborgium,266
+107,Bh,Bohrium,264
+108,Hs,Hassium,277
+109,Mt,Meitnerium,268
+110,Ds,Ununnilium,271
+111,Rg,Unununium,272
+112,Uub,Ununbium,285
+113,Uut,Ununtrium,284
+114,Uuq,Ununquadium,289
+115,Uup,Ununpentium,288
+116,Uuh,Ununhexium,292
+117,Uuh,Ununhexium,293
+118,Uuo,Ununoctium,294
+
+

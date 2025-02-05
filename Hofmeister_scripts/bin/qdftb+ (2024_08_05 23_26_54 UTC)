@@ -1,0 +1,42 @@
+#!/bin/bash
+
+if [ $# -ne 3 ]
+then
+ echo "Usage: $0 job# cores time(hh:mm:ss)"
+ exit 1
+fi
+
+job=$1
+cores=$2
+walltime=$3
+
+#check for files
+
+for f in dftb_in.hsd 
+do
+ if [ ! -f $f ]
+ then
+  echo "The file $f does not exist. Job is not submitted."
+  exit 1
+ fi
+done
+
+cat <<END > submit
+#!/bin/bash 
+#PBS -N $job
+#PBS -l select=1:ncpus=$cores:mem=4gb
+#PBS -l walltime=$walltime
+#PBS -l software=dftb
+#PBS -V
+
+#source ~/.bashrc
+printenv
+
+#echo \`hostname\`
+#cd \$PBS_O_WORKDIR
+#export OMP_NUM_THREADS=$cores
+/home/ajp/bin/dftb+ >& \$PBS_O_WORKDIR/$job.out
+END
+
+#do it
+qsub -V submit ; rm -f submit

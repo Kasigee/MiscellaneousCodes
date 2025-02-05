@@ -1,0 +1,85 @@
+#!/bin/bash
+
+wd=$PWD
+
+if [ $# -ne 2 ]
+then
+ echo "specify cation anion"
+# echo "Usage:$0 solvent(H2O,MeOH,MeCN)"
+ exit 1
+fi
+
+
+echo "Cation Anion  ES EX REP POL DISP TOT"
+for i in $1
+#for i in  Al Mg Ca Li Na NH4 guanidinium
+do
+ for j in $2
+ #for j in HPO4 SO4 F HCO3 acetate Cl Br NO3 ClO4 SCN PF6
+ do
+ #for y in H2O MeOH MeCN
+ #for y in $1
+ #do
+  #echo "ANALYSIS of $j $i $y"
+   if [ $j == NCS ]; then
+    cd $wd/ion_int/$i/SCN
+   else
+    cd $wd/ion_int/$i/$j
+   fi
+
+    if [ ! -f "$i""$j"_m062x_ccd_EDA.out ]
+    then
+     echo ""$i""$j"_m062x_ccd EDA - job probably did not run"
+    else
+     if [ ! -n "`grep -i 'EXECUTION OF GAMESS TERMINATED NORMALLY' "$i""$j"_m062x_ccd_EDA.out`" ]
+     then
+      echo "check "$i""$j"_m062x_ccd EDA"
+     else
+      es=`grep 'ELECTROSTATIC ENERGY                  ES=' "$i""$j"_m062x_ccd_EDA.out | tail -n1 | awk '{ print $5 }'`
+      ex=`grep 'EXCHANGE ENERGY                       EX=' "$i""$j"_m062x_ccd_EDA.out | tail -n1 | awk '{ print $5 }'`
+      er=`grep 'REPULSION ENERGY                     REP=' "$i""$j"_m062x_ccd_EDA.out | tail -n1 | awk '{ print $5 }'`
+      ep=`grep 'POLARIZATION ENERGY                  POL=' "$i""$j"_m062x_ccd_EDA.out | tail -n1 | awk '{ print $5 }'`
+     # edesol=`grep 'DESOLVATION ENERGY            DESOL=' "$i""$j"_m062x_ccd_EDA.out | tail -n1 | awk '{ print $5 }'`
+      edisp=`grep 'DFT DISPERSION ENERGY               DISP=' "$i""$j"_m062x_ccd_EDA.out | tail -n1 | awk '{ print $6 }'`
+      e=`grep 'TOTAL INTERACTION ENERGY HF OR DFT     E=' "$i""$j"_m062x_ccd_EDA.out | tail -n1 | awk '{ print $9 }'`
+
+      echo "$i $j $es $ex $er $ep $edisp $e"
+     fi
+    fi
+   done
+  done
+
+exit 0
+
+
+PCM 
+
+ -------------
+ ALL BASIS SET                                       HARTREE          KCAL/MOL
+ -------------
+ ELECTROSTATIC FREE ENERGY             ES=         -0.130454            -81.86
+ EXCHANGE FREE ENERGY                  EX=         -0.108514            -68.09
+ REPULSION FREE ENERGY                REP=          0.276419            173.46
+ POLARIZATION FREE ENERGY             POL=         -0.110642            -69.43
+ DESOLVATION FREE ENERGY            DESOL=          0.037314             23.41
+ DFT DISPERSION ENERGY               DISP=         -0.027175            -17.05
+ TOTAL INTERACTION ENERGY HF OR DFT     E=         -0.063052            -39.57
+
+ -------------------------------------
+ IN SUPER MOL (FOR SPECIAL COMPARISON)               HARTREE          KCAL/MOL
+ -------------------------------------
+ ELECTROSTATIC ENERGY                  ES=         -0.395266           -248.03
+ EXCHANGE ENERGY                       EX=         -0.037815            -23.73
+ DFT CORRELATION                     CORR=         -0.025802            -16.19
+ TOTAL INTERACTION ENERGY HF OR DFT     E=         -0.542714           -340.56
+
+
+Non PCM
+
+ ELECTROSTATIC ENERGY                  ES=         -0.168533           -105.76
+ EXCHANGE ENERGY                       EX=         -0.029771            -18.68
+ REPULSION ENERGY                     REP=          0.093808             58.87
+ POLARIZATION ENERGY                  POL=         -0.039248            -24.63
+ DFT DISPERSION ENERGY               DISP=         -0.021860            -13.72
+ TOTAL INTERACTION ENERGY HF OR DFT     E=         -0.165602           -103.92
+

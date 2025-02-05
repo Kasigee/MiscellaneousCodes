@@ -1,0 +1,35 @@
+#!/bin/bash
+
+if [ $# -ne 4 ]
+then
+   echo "Usage: $0 input-file[.???] ncpus mem wallclocktime(hh:mm:ss)"
+   exit 1
+fi
+
+
+ f="$1"
+
+
+cat <<END >> $f.job
+ #!/bin/bash
+#PBS -P dt3
+#PBS -N $f
+#PBS -l walltime=$4
+#PBS -l ncpus=$2
+#PBS -l mem=$3
+#PBS -l software=espresso
+#PBS -l jobfs=2GB
+#PBS -l wd
+
+module unload openmpi/1.6.3 
+module load qe
+ 
+export TMPDIR=$PBS_JOBFS
+mpirun -np $PBS_NCPUS pw.x < $f.in > $f.out 2>&1
+END
+
+# Now submit it
+qsub $f.job
+rm -f $f.job
+
+exit 0

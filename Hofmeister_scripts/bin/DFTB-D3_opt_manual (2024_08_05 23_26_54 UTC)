@@ -1,0 +1,71 @@
+#!/bin/bash
+
+wd=$PWD
+
+echo "Usage: $0 number steroid"
+
+for i in `ls $1/$2/*/*opt.out $2/*/*opt.out | awk -F'.out' '{print $1}'`
+do
+file=$i
+location=`dirname $file.com`
+cd $location
+echo $location
+name=`basename $file.com | awk -F'.com' '{print $1}'`
+natoms=`grep "NAtoms=" "$name".out | awk '{print $2}'`
+echo "$name NAtoms=$natoms"
+
+if  grep -q "Normal termination" "$name".out  ||  grep '#p opt am1' "$name"_3ob.com  ; then
+#if [ ! -f "$name"_3ob.com ]
+#then
+echo "Making "$name"_3ob.com"
+out-xyz_3ob "$name".out $natoms #make xyz file from output cooordinates
+xyz-com "$name"_3ob.xyz #make new .com file from .xyz file
+#rm "$name"_3ob.xyz
+sed -i 's/%k l301/%nproc=4/g' "$name"_3ob.com #edit new .com file for DFTB-D3
+
+sed -i 's/#p opt am1/# opt external="\/home\/kpg600\/bin\/GauDFTB3-D"/g' "$name"_3ob.com
+sed -i '2i %mem=2gb' "$name"_3ob.com
+awk '{print $1,$2,$3,$4}' "$name"_3ob.com > "$name"_3ob.tmp #This line won't work for all .com files. (Will for this set though)
+cat "$name"_3ob.tmp > "$name"_3ob.com
+#cat "$name"_3ob.tmp
+rm "$name"_3ob.tmp
+#else
+echo ""$name"_3ob.com exists"
+#fi
+else
+echo ""$name".out is not normally terminated."
+fi
+
+if  grep '#p opt am1' "$name"_3ob.com ; then
+echo ".com file wrong... Check #p opt am1 line???"
+sed -i 's/#p opt am1/# opt external="/home/kpg600/bin/GauDFTB3-D"/g' "$name"_3ob.com
+fi
+
+if grep '#p opt am1' "$name"_3ob.out ; then
+echo 'Wrong optimisation was run previously. Rerunning.'
+qsubg09 "$name"_3ob 48:00:00
+fi
+
+if grep -q "Normal termination" "$name"_3ob.out ||  grep '#p opt am1' "$name"_3ob.com ; then
+ echo "$name_3ob.out Normally Terminated. Or .com wrong"
+ else
+ qued=`qstat -f | grep "$name"_3ob | wc -l`
+ if [ $qued -ge 1 ]
+  then
+  echo "Already in que"
+  else
+  echo "Queuing "$name"_3ob"
+  qsubg09 "$name"_3ob 48:00:00
+ fi
+fi
+cd $wd
+
+qued=`qstat -f | grep "Job_Name" | grep "$name"_3ob | wc -l`
+echo $qued
+while [ $qued -ge 1 ]
+do
+echo "$name still running"
+sleep 300
+qued=`qstat -f | grep "Job_Name" | grep "$name"_3ob | wc -l`
+done
+done

@@ -1,0 +1,82 @@
+#!/bin/bash
+
+if [ $# -ne 4 ]
+then
+ echo "Usage: $0 job.[run] cores mem(gb) time(hh:mm:ss)"
+ exit 1
+fi
+
+job=$1
+cores=$2
+mem=$3
+walltime=$4
+
+#check for files
+
+for f in $1.run
+do
+ if [ ! -f $f ]
+ then
+  echo "The file $f does not exist. Job is not submitted."
+  exit 1
+ fi
+done
+
+cat <<END > $1.job
+#!/bin/bash 
+#PBS -N $job
+#PBS -l select=1:ncpus=$cores:mem=$mem:lscratch=$mem
+#PBS -l walltime=$walltime
+#PBS -k eo
+
+# Find out name of master execution host (compute node)
+echo -n ">>>> PBS Master compute node is: "
+hostname
+
+# You must explicitly change to the working directory in PBS
+cd $PBS_O_WORKDIR
+
+# set the ADF root directory
+export ADFROOT=/home/ajp/adf2016.104
+export ADFHOME=$ADFROOT
+
+
+# point ADF to the ADF license file
+export SCMLICENSE=$ADFHOME/license.txt
+
+# set up ADF scratch directory 
+#export MY_SCRDIR=`whoami;date '+%m.%d.%y_%H:%M:%S'`
+#export MY_SCRDIR=`echo $MY_SCRDIR | sed -e 's; ;_;'`
+export SCM_TMPDIR=/home/kpg600/scr
+
+mkdir -p $SCM_TMPDIR
+
+echo ""
+echo "The ADF scratch files for this job are in: $SCM_TMPDIR"
+echo ""
+
+# set the number processors to use in this job to $cores
+export NSCM=$cores
+
+# run the ADF job
+echo "Starting ADF job ... "
+echo ""
+
+export PATH=$PATH:~/bin/
+ulimit -s unlimited
+
+ adf -n $cores < $job.run > $job.out 2>&1
+
+# name output files
+mv logfile $job.logfile
+
+echo ""
+echo "ADF job finished ... "
+
+# clean up scratch directory files
+rm -r $SCM_TMPDIR
+END
+
+#do it
+qsub $1.job 
+#rm -f $1.job

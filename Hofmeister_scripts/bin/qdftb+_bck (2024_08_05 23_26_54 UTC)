@@ -1,0 +1,51 @@
+#!/bin/bash
+
+if [ $# -ne 3 ]
+then
+ echo "Usage: $0 job# cores time(hh:mm:ss)"
+ exit 1
+fi
+
+job=$1
+cores=$2
+walltime=$3
+
+#check for files
+
+for f in dftb_in.hsd 
+do
+ if [ ! -f $f ]
+ then
+  echo "The file $f does not exist. Job is not submitted."
+  exit 1
+ fi
+done
+
+cat <<END > submit
+#!/bin/bash 
+#PBS -N $job
+#PBS -l select=1:ncpus=$cores:mem=4gb
+#PBS -l walltime=$walltime
+
+
+#export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/lib64:usr/lib:/home/ajp/bin:/home/kpg600/bin/lib64
+echo \`hostname\`
+#export MODULEPATH=$MODULEPATH:/cm/shared/apps
+#export MODULEPATH=$MODULEPATH:/cm/software/modulefiles
+#export MODULEPATH=$MODULEPATH:/cm/software/apps
+#source /etc/profile.d/modules.sh
+#module purge
+#module load intel/compiler intel/mkl arpack 
+#intel/compilers_and_libraries/2017.2.174
+cd \$PBS_O_WORKDIR
+export OMP_NUM_THREADS=$cores
+#/home/ajp/dftb+ >> \$PBS_O_WORKDIR/$job.out
+
+#cd \$PBS_O_WORKDIR 
+#export OMP_NUM_THREADS=$cores
+#/home/ajp/bin/dftb+_1.3 > \$PBS_O_WORKDIR/$job.out 
+/home/ajp/bin/dftb+ > \$PBS_O_WORKDIR/$job.out
+END
+
+#do it
+qsub submit ; rm -f submit

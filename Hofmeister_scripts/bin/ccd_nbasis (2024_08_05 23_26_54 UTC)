@@ -1,0 +1,15 @@
+Element nShells nFunction
+H 3 5
+C 6 22
+N 6 22
+O 6 22
+F 6 22
+S 9 51
+Cl 9 51
+
+
+#
+#eg. 486 Basis set shells
+#    with 1020 Cartesian Gaussian basis functions
+#    1326 Basis something.... calced
+# What happens to 306 of these (between calced and told)??

@@ -1,0 +1,50 @@
+#!/bin/bash
+
+if [ $# -ne 4 ]
+then
+ echo "Usage: $0 job.[inp] cores mem(gb) time(hh:mm:ss)"
+ exit 1
+fi
+
+job=$1
+cores=$2
+mem=$3
+walltime=$4
+
+#check for files
+rm ~/scratch/$1.dat
+
+for f in $1.inp
+do
+ if [ ! -f $f ]
+ then
+  echo "The file $f does not exist. Job is not submitted."
+  exit 1
+ fi
+done
+
+cat <<END > $1.job
+#!/bin/bash 
+#PBS -N $job
+#PBS -l select=1:ncpus=$cores:mem=$mem 
+#PBS -l walltime=$walltime
+#PBS -k eo
+
+
+export PATH=$PATH:~/bin/
+export OMP_NUM_THREADS=1
+export USERSCR=\$TMPDIR
+export SCR=\$TMPDIR
+ulimit -s unlimited
+
+cd \$PBS_O_WORKDIR 
+echo "Job running on \`hostname\`" with $cores "cores"
+for i in \`ipcs -s | awk '{print \$2}'\`; do (ipcrm -s \$i); done
+~/bin/GKSEDA/rungms $1 00 $cores 1 >& \$PBS_O_WORKDIR/$job.out 
+rm -rf \$TMPDIR/$1.*
+
+END
+
+#do it
+qsub $1.job 
+rm -f $1.job

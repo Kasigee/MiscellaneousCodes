@@ -1,0 +1,15 @@
+#!/bin/bash
+
+if [ $# -ne 2 ]
+then
+  echo "$0 outputfile.out basis"
+ exit 1
+fi
+
+outputname=`echo $1 | awk -F '.' '{print $1".irc.energy.dat"}'`
+rm $outputname
+basis=$2
+
+echo "Start Energy Scan"
+echo ReactCoord Energy > $outputname
+grep 'NET REACTION COORDINATE UP\|E(RPM6)' irc.out | awk -F= '{print $2}' | awk '{print $1}' | awk '{printf "%s%s",$0,(NR%2?FS:RS)}' >> $outputname

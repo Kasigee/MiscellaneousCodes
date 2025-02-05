@@ -1,0 +1,37 @@
+#!/bin/bash
+
+if [ $# -ne 1 ]
+then
+  echo "$0 outputfile.out"
+ exit 1
+fi
+
+outputname=`echo $1 | awk -F '.' '{print $1".xyz"}'`
+rm $outputname
+natoms=`grep 'NAtoms=' $1 | head -n1 |  awk '{print $2}'`
+if [ -z $natoms ]
+then
+lineatoms=`grep -n "Sum of Mulliken charges" $1 | awk -F: '{print $1}'`
+natoms=`head -n $lineatoms $1 | tail -n2 | head -n1 | awk '{print $1}'`
+fi
+
+linestart1=`grep -n Coordinates $1 | tail -n1 | awk -F: '{print $1}'`
+linestart2=`expr $linestart1 + 2`
+
+linefinish=`expr $linestart2 + $natoms`
+echo "output file is $outputname, number of atoms is $natoms"
+
+
+echo $natoms > $outputname
+echo "Comment " >> $outputname
+echo $linefinish $natoms
+head -n $linefinish $1 | tail -n $natoms | awk '{ print "atom"$2,$4,$5,$6}' > tempcoords.tmp 
+for k in ` awk  '{ print $1 }' tempcoords.tmp`
+do
+atomnumber=`echo $k | awk -F'atom' '{print $2}'`
+atomletter=`grep -w $atomnumber ~/bin/elementlist_2 | head -n1 | awk '{ print $2}'`
+sed -i "s/"$k" /$atomletter /g" tempcoords.tmp
+done
+cat tempcoords.tmp >> $outputname
+rm tempcoords.tmp
+#rm sed??????

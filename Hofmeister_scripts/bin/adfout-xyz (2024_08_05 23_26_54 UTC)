@@ -1,0 +1,27 @@
+#!/bin/bash
+
+if [ $# -ne 1 ]
+then
+ echo "Usage: $0 job.[out]"
+ exit 1
+fi
+
+
+
+out=$1
+
+#natomline=`grep "Total System Charge" $out.out`
+#echo natomline=$natomline
+#natomline2=`expr $natomline - 2`
+#natoms=`head -n $natomline2 $out.opt | tail -n1 | awk '{print $1}'`
+#echo $natoms
+natoms=`grep "Number of atoms" $out.out | awk '{print $4}'`
+linestart=`grep -n angstrom $out.out | tail -n2 | head -n1 | awk -F: '{print $1}'`
+linestart2=`expr $linestart + 1`
+linefinish=`expr $linestart + $natoms`
+#echo "Natoms=$natoms LS1=$linestart LS2=$linestart2 LF=$linefinish"
+
+echo $natoms > $out.xyz
+Energy=`grep "Total Energy (hartree)" $out.out`
+echo "$Energy" >> $out.xyz
+head -n $linefinish $out.out | tail -n $natoms | awk '{print $2,$3,$4,$5}' >> $out.xyz

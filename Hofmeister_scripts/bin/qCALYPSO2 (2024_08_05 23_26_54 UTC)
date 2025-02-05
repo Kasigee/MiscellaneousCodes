@@ -1,0 +1,72 @@
+#!/bin/sh
+#
+# Submit a Gaussian 09 job to the grid
+#
+# $1      -- name of input file
+# $2      -- wall time (hours)
+# 
+# Number of processors will be read from the Gaussian input file
+# Memory per processor is 1.8 Gb per node
+#
+# Additional specification in the input line is possible only after supplying walltime in hours
+#
+# First check if the queue exists
+#
+
+#
+# check for the input file
+#
+
+#if [ $# -ne 3 ]
+#then
+#   echo "Usage: $0 input-file[.com]  wallclocktime(hh:mm:ss) #nodes"
+#   exit 1
+#fi
+#
+#nodes=$3
+
+if [ $# -ne 4 ]
+then
+   echo "Usage: $0 name cores mem wallclocktime(hh:mm:ss)"
+   exit 1
+fi
+nodes=1
+
+# split file into name & extension
+
+f="$1"
+NPROC=$2
+MEM=$3
+nodes=1
+walltime=$4
+
+# Start creating the input file
+cat <<END >>$f.job
+#!/bin/bash
+#PBS -N $f
+#PBS -l select=$nodes:ncpus=$NPROC:mem=$MEM
+#PBS -l walltime=$walltime
+#PBS -r n
+
+export OMP_NUM_THREADS=$NPROC
+ulimit -s unlimited
+
+cd \$PBS_O_WORKDIR
+echo "This job is running on host \`hostname\`" > $f.out
+echo "Current directory: \$PBS_O_WORKDIR" >> $f.out
+date >> $f.out
+
+# do it
+~/Jon/CALYPSO_x64/bin/calypso.x  > caly.log &
+
+# clean up /tmp
+#rm -rf \$GAUSS_SCRDIR
+
+END
+
+# Now submit it.
+qsub $f.job
+rm -f $f.job
+
+exit 0
+

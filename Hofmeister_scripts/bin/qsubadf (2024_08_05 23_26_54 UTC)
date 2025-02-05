@@ -1,0 +1,94 @@
+#!/bin/sh
+#
+# Submit an ADF job to ilsim01 via PBS queue
+#
+# $1      -- name of input file
+# $2      -- # cores
+# $3      -- wall time (hours)
+# $4      -- memory
+#
+#
+# Number of processors will be read from the Gaussian input file
+# Memory per processor is 1.8 Gb per node
+#
+# Additional specification in the input line is possible only after supplying walltime in hours
+#
+# First check if the queue exists
+#
+
+#
+# check for the input file
+#
+
+if [ $# -ne 4 ]
+then
+   echo "Usage: $0 input-file[.run] #cores memory(gb,mb) wallclocktime (hh:mm:ss)"
+   exit 1
+fi
+
+# split file into name & extension
+
+if [ -n `echo $1 | grep '.run'` ]
+then
+ f=`basename  $1 .run`
+else
+ f="$1"
+fi
+
+# Check if the input file exists with extension .com
+
+if ! test -e $f.run
+then
+        echo "$f.run DOES NOT exist"
+        echo "This job is not submitted"
+        exit 1
+fi
+# Get the number of processors in the Gaussian input file.
+# default behaviour is to run on a single node
+
+NPROC=$2
+
+if [ $NPROC -gt 32 ]
+then
+ echo "maximum procs is 32 for pauling cluster. Exiting..."
+ exit 1
+fi
+
+# Start creating the input file
+cat <<END >>$f.job
+#!/bin/bash
+#PBS -N $f
+#PBS -l select=1:ncpus=$NPROC:mem=$3
+#PBS -l walltime=$4
+#PBS -k eo
+
+
+#setup SCM environment explicitly
+. /home/ajp/adf2016.104/adfrc.sh
+
+export OMP_NUM_THREADS=$NPROC
+ulimit -s unlimited
+newgrp rschproj_ajp
+groups
+
+cd \$PBS_O_WORKDIR
+echo "This job is running on host \`hostname\`" > $f.out
+echo "Current directory: \$PBS_O_WORKDIR" >> $f.out
+date >> $f.out
+
+# set paths
+export SCM_TMPDIR=/tmp
+export ADFBIN=/home/ajp/adf2016.104/bin
+
+# do it
+sh $f.run "NSCM=/home/ajp/adf2016.104/licence.txt; export NSCM" > $f.out
+#\$PBS_O_WORKDIR/$f.run >> \$PBS_O_WORKDIR/$f.out
+
+
+END
+
+# Now submit it.
+qsub $f.job
+rm -f $f.job
+
+exit 0

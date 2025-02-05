@@ -1,0 +1,59 @@
+#!/bin/bash
+
+if [ $# -ne 5 ]
+then
+ echo "Usage: $0 job.[inp] ppn node mem(gb) time(hh:mm:ss)"
+ exit 1
+fi
+
+job=$1
+cores=$2
+nodes=$3
+mem=$4
+walltime=$5
+#nodes=2
+PPN=`echo "$cores /$nodes" | bc`
+PMEM=`echo $mem | awk -F'gb' '{print $1}'`
+PMEM2=`echo "$PMEM /$nodes" | bc`
+MPIPROCS=`expr $nodes \* $cores`
+#echo "$PPN $PMEM2"
+#check for files
+rm ~/scratch/$1.dat
+
+for f in $1.inp
+do
+ if [ ! -f $f ]
+ then
+  echo "The file $f does not exist. Job is not submitted."
+  exit 1
+ fi
+done
+
+echo $mem
+
+#PBS -l select=$nodes:ncpus=$ppn:mpiprocs=$MPIPROCS:mem=$mem
+cat <<END > $1.job
+#!/bin/bash 
+#PBS -N $job
+#PBS -l select=$nodes:ncpus=$cores:mem=$mem
+#PBS -l walltime=$walltime
+#PBS -k eo
+
+
+export PATH=$PATH:~/bin/
+export OMP_NUM_THREADS=1
+export USERSCR=\$TMPDIR
+export SCR=\$TMPDIR
+ulimit -s unlimited
+
+cd \$PBS_O_WORKDIR 
+echo "Job running on \`hostname\`" with $ppn "cores" and $nodes "nodes"
+for i in \`ipcs -s | awk '{print \$2}'\`; do (ipcrm -s \$i); done
+~/bin/GKSEDA/rungms3 $1 00 $cores $nodes 1 >& \$PBS_O_WORKDIR/$job.out 
+rm -rf \$TMPDIR/$1.*
+
+END
+
+#do it
+qsub $1.job 
+rm -f $1.job

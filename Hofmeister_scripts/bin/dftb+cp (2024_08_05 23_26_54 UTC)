@@ -1,0 +1,97 @@
+#!/bin/bash
+
+if [ $# -ne 2 ]
+then
+ echo "Usage: $0 [old directory] [new directory]"
+ echo "This program requires file 'dftb_in.hsd' to exist!"
+ exit 1
+fi
+
+wd=$PWD
+olddir=$1
+newdir=$2
+
+#check old directory existence
+if [ ! -d $wd/$olddir ]
+then
+ echo "$wd/$olddir does not exists...???. Exiting..."
+ exit 0
+fi
+
+finish=`grep -i "Molecular dynamics completed" $wd/$newdir/run.out`
+if [ "$finish" == "Molecular dynamics completed" ]
+then
+	echo "$wd/$newdir already exists and completed. Exiting..."
+	exit 1
+fi
+
+#check new directory existence
+#if [ -d $wd/$newdir ]
+#then
+# echo "$wd/$newdir already exists. Exiting..."
+ #if [ -f $wd/$newdir/geom.gen ]
+ #then
+#	exit 1
+ #else
+	 out=`grep -i 'outputprefix' $wd/$olddir/dftb_in.hsd | sed 's/[\ ,=,\"]//g' | sed 's/^.\{12\}//g'`
+	 cp $wd/$olddir/$out.gen $wd/$newdir/$gen
+# fi
+#fi
+
+#check current dftb_in.hsd file exists
+if [ ! -f $wd/$olddir/dftb_in.hsd ]
+then
+ echo "$wd/$olddir/dftb_in.hsd does not exist. Exiting..."
+ exit 1
+fi
+
+# define output geometry file names, check for existence
+out=`grep -i 'outputprefix' $wd/$olddir/dftb_in.hsd | sed 's/[\ ,=,\"]//g' | sed 's/^.\{12\}//g'`
+gen=`sed -n '/[G,g]en[F,f]ormat/,+1 p' $wd/$olddir/dftb_in.hsd | tail -n1 | sed 's/[<,\ ,\"]//g'`
+velocity=`sed -n '/[V,v]elocities/,+1 p' $wd/$olddir/dftb_in.hsd | tail -n1 | sed 's/[<,\ ,\"]//g'`
+
+for file in $out $gen 
+do
+ if [ "$file" == "" ]
+ then
+  echo "Inconsistent $wd/$olddir/dftb_in.hsd file. Exiting..."
+  exit 1
+ fi
+done
+
+if [ ! -f $wd/$olddir/$gen ]
+then
+ echo "$wd/$olddir/$gen does not exist. Exiting..."
+ exit 1
+fi
+if [ ! -f $wd/$olddir/$out.xyz ]
+then
+ echo "$wd/$olddir/$out.xyz does not exist. Exiting..."
+ exit 1
+fi
+
+# otherwise, proceed.
+mkdir $wd/$newdir
+cp $wd/$olddir/$out.gen $wd/$newdir/$gen
+cp $wd/$olddir/dftb_in.hsd $wd/$newdir/dftb_in.hsd
+cd $wd/$newdir ; gen-xyz $gen ; cd $wd
+
+if [ "$velocity" == "" ]
+then
+ sed -i '
+ /[V,v]elocity[V,v]erlet/ a\
+  Velocities = { \
+      <<< \"VELOC.DAT\" \
+        } 
+ ' $wd/$newdir/dftb_in.hsd
+fi
+velocity=VELOC.DAT
+natom=`head -n1 $wd/$olddir/$gen | sed 's/[s,S,c,C,\ ]//g'`
+#
+# convert output xyz velocity units (AA/ps) to input velocity units (au).
+#
+tail -n $natom $wd/$olddir/$out.xyz | awk '{printf( "%14.16f %14.16f %14.16f \n", $6*0.457102857516272e-04, $7*0.457102857516272e-04, $8*0.457102857516272e-04)}' > $wd/$newdir/$velocity
+
+exit 0
+
+

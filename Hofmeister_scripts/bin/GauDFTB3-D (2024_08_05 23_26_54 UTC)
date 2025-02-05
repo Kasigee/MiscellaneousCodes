@@ -1,0 +1,332 @@
+#!/usr/bin/env python
+#
+# Written by Tom Grimes-Marchan, 15-April 2008
+#
+# This is a script to run DFTB+ externally from Gaussian
+#
+from sys import argv
+from os import getpid, popen, unlink
+from os.path import join, exists
+from shutil import copy
+
+# Some code is implemented for PBC, but not completely
+# problems like gradient of tvecs is not solved
+### CONSTANTS ###
+# Atomic number to atom conversion
+elements={1:'H',2:'He',\
+3:'Li',4:'Be',5:'B',6:'C',7:'N',8:'O',9:'F',10:'Ne',\
+11:'Na',12:'Mg',13:'Al',14:'Si',15:'P',16:'S',17:'Cl',18:'Ar',\
+26:"Fe",28:"Ni",45:"Rh",98:"Tv"}
+# Maximum angular momentum for elements
+maxang={'H':'s','C':'p','O':'p','N':'p','Fe':'d','Ni':'d'}
+# spin-polarization constants (PBE)
+spconst={'H':'-0.072','C':'-0.031 -0.025 -0.025 -0.023','O':'-0.035 -0.030 -0.030 -0.028',\
+  'Fe':'-0.016 -0.012 -0.003 -0.012 -0.029 -0.001 -0.003 -0.001 -0.015',\
+  'Ni':'-0.016 -0.012 -0.003 -0.012 -0.022 -0.001 -0.003 -0.001 -0.018'}
+# dispersion constants
+# note P values only for PO4, S values not for SO2.
+dispconst={'H':'0.386 0.386 0.000 0.000 0.000 0.000 3.5 3.5 3.5 3.5 3.5 3.5 0.80',\
+  'C':'1.382 1.382 1.382 1.064 1.064 1.064 3.8 3.8 3.8 3.8 3.8 3.8 2.50',\
+  'O':'0.560 0.560 0.000 0.000 0.000 0.000 3.8 3.8 3.8 3.8 3.8 3.8 3.15',\
+  'N':'1.030 1.030 1.090 1.090 1.090 1.090 3.8 3.8 3.8 3.8 3.8 3.8 2.82',\
+  'P':'1.600 1.600 1.600 1.600 1.600 1.600 4.7 4.7 4.7 4.7 4.7 4.7 4.50',\
+  'S':'3.000 3.000 3.000 3.000 3.000 3.000 4.7 4.7 4.7 4.7 4.7 4.7 4.80'}
+# covalent radii
+# note C is the sp2 value
+covrad={'H':'0.31','C':'0.73','N':'0.71','O':'0.66'}
+# hubbard derivaties
+# see Gaus et al, JCTC 7 931 (2011)
+du={'H':'-0.1857','C':'-0.1492','N':'-0.1535','O':'-0.1575'}
+
+# Give the paths to the Slater-Koster files and the dftb+ executable
+slakos="/home/ajp/slako/3ob-3-1"
+dftb="/home/ajp/bin/dftb+"
+
+### OPTIONS ###
+# set VERBOSE to True if you want all the DFTB+ stdout to be printed
+VERBOSE=True
+
+# set this to True if you want spin polarization
+SPIN=False
+
+# set this to True if you want dispersion
+DISPERSION=True
+
+# electronic temperature
+ETEMP=298.15
+
+### DEFS ###
+
+# get the info from Gaussian
+def getinfo(fname):
+
+  # var init
+  info={}
+  f=open(fname,"r")
+
+  # read first line
+  tok=f.readline().strip().split()
+  info["natoms"]=int(tok[0])
+  info["nderiv"]=int(tok[1])
+  info["charge"]=int(tok[2])
+  info["mult"]=int(tok[3])
+
+  # read the atomic coordinates
+  info["tvecs"]=[]
+  info["geom"]=[]
+  for n in range(info["natoms"]):
+    tok=f.readline().strip().split()
+    name=elements[int(tok[0])]
+    if name != "Tv":
+      info["geom"].append([name]+[x*0.529177249 for x in map(float,tok[1:4])])
+    else:
+      info["tvecs"].append([name]+[x*0.529177249 for x in map(float,tok[1:4])])
+
+  # return the information
+  f.close()
+  return info
+
+# Make the hsd file
+def makeinput(info):
+
+  # first get a file
+  f=open("dftb_in.hsd","w")
+
+  # write the geometry
+  f.write("Geometry = GenFormat {\n");
+  if len(info["tvecs"]) == 0:
+    f.write("%i C\n"%info["natoms"])
+  else:
+    f.write("%i S\n"%info["natoms"])
+
+  # make an atom type list
+  atlist=[]
+  attype={}
+  for c in info["geom"]:
+    if len(atlist) > 0:
+      if not c[0] in atlist:
+        atlist.append(c[0])
+        attype[c[0]]=len(atlist)
+    else:
+      atlist.append(c[0])
+      attype[c[0]]=1
+
+  # now we can write the actual geometry
+  for a in atlist:
+    f.write(" %s"%a)
+  f.write("\n")
+  idx=1
+  for coord in info["geom"]:
+    f.write("%i %i %f %f %f\n"%tuple([idx,attype[coord[0]]]+coord[1:]))
+    idx=idx+1
+
+  # if transition vecs exist, write them
+  if len(info["tvecs"])>0:
+    f.write("0.00 0.00 0.00\n")
+    for v in info["tvecs"]:
+      f.write("%f %f %f\n"%tuple(v))
+
+  f.write("}\n")
+
+  # singlepoint request
+  f.write("Driver = {}\n")
+
+  # write the tedious Hamiltonian section
+  # header first
+  f.write( \
+"""Hamiltonian = DFTB {
+SCC = Yes
+SCCTolerance = 1.0e-12
+MaxSCCIterations = 200
+Mixer = Broyden {
+MixingParameter = 0.2
+}
+""")
+
+  # now for the Slater-Koster files
+  f.write( \
+"""SlaterKosterFiles = Type2FileNames {		# Specifying Slater-Koster files
+	Prefix = "/home/ajp/slako/3ob-3-1/"
+        Separator = "-"
+        Suffix = ".skf" 
+	}
+""")
+#  for at1 in atlist:
+#    for at2 in atlist:
+
+#      # for each pair, check to see what file we have
+#      apair=""
+#      if exists(join(slakos,"%s-%s.skf"%(at1,at2))):
+#        apair="%s-%s"%(at1,at2)
+#      elif exists(join(slakos,"%s-%s.skf"%(at2,at1))):
+#        apair="%s-%s"%(at2,at1)
+#      else:
+#        print "Unable to locate params for %s-%s pair"%(at1,at2)
+#
+#      f.write("%s-%s = \"%s.skf\"\n"%(at1,at2,join(slakos,apair)))
+#  f.write("}\n")
+
+  # Write the Max angular momentum
+  f.write("MaxAngularMomentum = {\n")
+  for at in atlist:
+    f.write("%s = \"%s\"\n"%(at,maxang[at]))
+  f.write("}\n")
+  f.write("Charge = %f\n"%info["charge"])
+
+  # write spin polarization
+  if SPIN:
+    f.write("SpinPolarisation = Colinear {\n")
+    f.write("UnpairedElectrons = %i\n"%(info["mult"]-1))
+    f.write("}\n")
+    f.write("SpinConstants = {\n")
+    for at in atlist:
+      f.write("%s = { %s }\n"%(at,spconst[at]))
+    f.write("}\n")
+  else:
+    f.write("SpinPolarisation = {}\n")
+  
+  #write 3rd order section
+  f.write("ThirdOrderFull = Yes\n")
+  f.write("DampXH = Yes\n")
+  f.write("DampXHExponent = 4.05\n")
+  f.write("HubbardDerivs {\n")
+  for at in atlist:
+    f.write("%s = %s \n"%(at,du[at]))
+  f.write("}\n")
+
+  #write dispersion
+  if DISPERSION:
+     f.write ("Dispersion = DftD3 {}\n")
+#     f.write( \
+#"""Dispersion = DftD3 {
+#Damping = BeckeJohnson {
+#a1 = 0.5719
+#a2 = 3.6017
+#}
+#s6 = 1.0
+#s8 = 0.5883
+#}
+#""")
+
+#    f.write("Dispersion = SlaterKirkwood { \n")
+#    f.write("PolarRadiusCharge = HybridDependentPol {\n")
+#    for at in atlist:
+#      f.write("%s = {\n"%at)
+#      f.write("CovalentRadius [Angstrom] = %s\n"%covrad[at])
+#      f.write("HybridPolarisations [Angstrom^3,Angstrom,] = { %s }\n"%dispconst[at])
+#      f.write("}\n")
+#    f.write("}\n")
+#    f.write("}\n")
+
+  # write the electronic temperature
+  f.write(\
+"""  Filling = Fermi {
+    Temperature [Kelvin] = %f
+  }
+"""%ETEMP)
+
+  # finish the Hamiltonian specification and the final sections
+  f.write(\
+"""}
+
+Options = {
+  CalculateForces = Yes
+}
+
+ParserOptions = {
+  ParserVersion = 3
+}
+""")
+  f.close()
+
+  # DEBUG: check the contents of the input file
+#  print "-"*80
+#  print "Input file for DFTB+:"
+#  f=open("dftb_in.hsd","r")
+#  for line in f:
+#    print line,
+#  f.close()
+#  print "-"*80
+
+  return
+
+# run the actual program
+def rundftb():
+
+  # run DFTB+
+  aout=popen(dftb,"r")
+  rawoutput=[]
+  for line in aout:
+    rawoutput.append(line)
+    if VERBOSE:
+      print line,
+  aout.close()
+
+  return rawoutput
+
+# make the Gaussian output file
+def makeoutput(rawoutput, fname, info):
+
+  # open the detailed output for reading
+  dfile=open("detailed.out","r")
+
+  # get the energy
+  line=dfile.readline()
+  while not "Total Mermin free energy:" in line:
+    line=dfile.readline()
+  E = float(line.split()[4])
+
+  # get the gradients (we always compute them)
+  line=dfile.readline()
+  while not "Total Forces" in line:
+    line=dfile.readline()
+  line=dfile.readline()
+  grad=[]
+  while line.strip() != "":
+    # CHANGE THE SIGN OF THE GRADIENT!! THIS IS IMPORTANT FOR MOPAC
+    # B/C MOPAC REPORTS THE FORCE = -GRADIENT
+    grad.append([-float(x) for x in line.strip().split()])
+    line=dfile.readline()
+
+  # we're done with the output
+  dfile.close()
+
+  # open the output file for writing
+  f=open(fname,"w")
+
+  # dump the energy and zero dipole
+  f.write("%20.12f%20.12f%20.12f%20.12f\n"%(E,0.,0.,0.))
+
+  # if requested, write the gradients
+  if info["nderiv"] > 0:
+    for g in grad:
+      f.write("%20.12f%20.12f%20.12f\n"%tuple(g))
+
+  # write zero polarizability and dipole derivs
+  for n in range(6+9*info["natoms"]):
+    f.write("%20.12f%20.12f%20.12f\n"%(0.,0.,0.))
+
+  # we can't do forces yet, so close and return
+  f.close()
+
+  return
+
+### MAIN ###
+
+# get input and output names
+
+ifname=argv[2]
+ofname=argv[3]
+
+# get input geometry
+info=getinfo(ifname)
+
+# make input file for DFTB+
+makeinput(info)
+
+# run DFTB+
+rawoutput=rundftb()
+
+# round up the output
+makeoutput(rawoutput, ofname, info)
+

@@ -1,0 +1,64 @@
+#!/bin/bash
+
+if [ $# -ne 4 ] && [ $# -ne 5 ]
+then
+ echo "Usage: $0 job cores mem(gb) time(hh:mm:ss) [queue]"
+
+ exit 1
+queue=$5
+#else
+#echo EXITING
+       #	exit 1
+fi
+
+job=$1
+cores=$2
+mem=$3
+walltime=$4
+queue=$5
+
+for f in $1
+do
+ if [ ! -f $f ]
+ then
+  echo "The file $f does not exist. Job is not submitted."
+  exit 1
+ fi
+done
+
+cat <<END > $1.job
+#!/bin/bash 
+#PBS -N $job
+#PBS -l select=1:ncpus=$cores:mem=$mem
+#PBS -l walltime=$walltime
+#PBS -k eo
+#PBS -q $queue
+
+export PATH=$PATH:~/bin/
+export PYTHONPATH="/home/kpg600/psi4conda:$PYTHONPATH"
+export OMP_NUM_THREADS=1
+export USERSCR=\$TMPDIR
+export SCR=\$TMPDIR
+ulimit -s unlimited
+
+cd \$PBS_O_WORKDIR
+
+psi4 -n $cores -i $1 -o $1.dat
+
+END
+
+#echo Queuing SAPT
+#do it
+if [ $queue == 'headnode' ]
+then
+	export PATH=$PATH:~/bin/
+	export PYTHONPATH="/home/kpg600/psi4conda:$PYTHONPATH"
+	export OMP_NUM_THREADS=1
+	export USERSCR=\$TMPDIR
+	export SCR=\$TMPDIR
+	ulimit -s unlimited
+	psi4 -n $cores -i $1 -o $1.dat
+else
+	qsub $1.job 
+fi
+rm -f $1.job

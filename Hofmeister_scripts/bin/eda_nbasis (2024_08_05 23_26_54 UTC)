@@ -1,0 +1,140 @@
+#!/bin/bash
+root=~
+
+if [ $# -ne 2 ]
+then
+echo "Usage: $0 filename series/parallel"
+exit 0
+fi
+
+file=$1
+mode=$2
+
+echo "Currently script only suited for CCD basis set; with elements H Li C N O F S Cl Na Br P Mg K Rb Cs I Mg Ca Zn"
+#echo "file=$file"
+echo '' > tmpnbasis 
+
+
+for Variable in `awk '{print $1}' $file`
+do
+if [ $Variable == H ] || [ $Variable == Li ] || [ $Variable == C ] || [ $Variable ==  N ] || [ $Variable == O ] || [ $Variable == F ] || [ $Variable == S ] || [ $Variable == Cl ] || [ $Variable == Na ] || [ $Variable == Br ] || [ $Variable == P ] || [ $Variable == Mg ] || [ $Variable == K ] || [ $Variable == Rb ] || [ $Variable == Cs ] || [ $Variable == I ] || [ $Variable == Mg ] || [ $Variable == Ca ] || [ $Variable == Zn ] || [ $Variable == He ] || [ $Variable == Ne ] || [ $Variable == Ar ] || [ $Variable == Kr ]
+then
+#echo $Variable
+basis=`grep -w $Variable $root/bin/n_basis | awk '{print $3}'`
+electrons=`grep -w $Variable $root/bin/n_basis | awk '{print $4}'`
+nBASIS=`expr $nBASIS + $basis`
+#nBASIS=$basis
+nelectrons=`expr $nelectrons + $electrons`
+#nelectrons=$electrons
+#echo $nBASIS
+#echo $nelectrons
+grep -w $Variable $root/bin/n_basis >> tmpnbasis
+fi
+done
+charge=`grep icharg $file | awk -F'=' '{print $5}'`
+FINALelectrons=`expr $nelectrons - $charge`
+echo "Total Charge=$charge; #Electrons=$FINALelectrons; #Basis_Functions=$nBASIS"
+#ReqDDIpre=`echo "scale=10; 3.00659 * 10^(-7) *(0.5 * $FINALelectrons * $nBASIS )^(1.98722)" | bc -l`
+ReqDDIpre=`echo "scale=10; 1.95745 * 10^(-7) *e(1.9775088411*l(0.5 * $FINALelectrons * $nBASIS))" | bc -l`
+echo "REQDDI= $ReqDDIpre"
+ReqDDI=`echo "$ReqDDIpre * 1.025" | bc`
+REPMEM=`grep mwords $file | awk '{print $2}' | awk -F'=' '{print $2}'`
+#echo $REPMEM
+ReqGB=`echo "scale=10; $ReqDDI*8/1024" | bc -l`
+GBUsing=$(echo "scale=0; ($ReqGB*1.8)/1" | bc)
+ReqCores=`echo "scale=0; $ReqGB/4 + 0.5" | bc`
+CoresUsed=$(echo "($ReqCores+0.5)/1" | bc)
+DDIUsed=$(echo "($ReqDDI+0.5)/1" | bc)
+#REPMEM_GB=`echo "$ReqCores* $REPMEM *8/1024" | bc -l`
+#echo "Replicated memory requires another $REPMEM_GB gb" 
+if [ $DDIUsed -lt 10000 ]
+then
+DDIUsed=`echo "scale=0; ($DDIUsed * 1.1)/1" | bc`
+GBUsing=`echo "scale=0; ($GBUsing * 1.1 + 1)/1 " | bc`
+CoresUsed=`echo "scale=0; ($CoresUsed * 1.1 + 1)/1" | bc`
+fi
+echo "Required DDI=$DDIUsed ReqGB=$GBUsing ReqCores=$CoresUsed"
+
+memddi=`grep 'memddi=' $file | awk '{print $3}' | awk -F'=' '{print $2}'`
+echo "$memddi to $DDIUsed in $file"
+sleep 1
+sed -i 's/memddi='$memddi'/memddi='$DDIUsed'/g' $file
+
+
+#export MODULEPATH=$MODULEPATH:/cm/software/modulefiles
+#module load pbspro
+#module load intel/compiler
+#module load intel/mkl
+#module load intel/mpi
+
+
+
+file_out1=`echo $file | awk -F. '{print $1}'`
+file_out2="$file_out1".out
+echo $file_out2
+tail -n400 $file_out2 > file_end.tmp
+if [ ! -n "`grep -i 'EXECUTION OF GAMESS TERMINATED NORMALLY' file_end.tmp`" ]
+then
+echo "Queuing: qgamessGKS $file_out1 $CoresUsed "$GBUsing"gb 16:00:00"
+if [ $mode == series ]
+then
+ #qgamessGKS_tst $file_out1 1 1 128gb 400:00:00 series
+ /home/ajp/GKSEDA/qgamess07 $file_out1 1 1 128gb 400:00:00 series
+ddi=`grep memddi $file_out1.inp | awk '{print $3}'`
+ sed -i 's/'$ddi'//g' $file_out1.inp
+ sed -i 's/mwords=1000/mwords=16000/g' $file_out1.inp
+elif [ $CoresUsed -le 36 ]
+ then
+ nodes=1
+ walltime=300:00:00
+ if grep -Fxq Br $file_out1.inp
+ then
+ walltime= 300:00:00
+ fi
+######TEMP SECTION
+CoresUsedX=$(echo "$CoresUsed/4" | bc )
+
+# $root/bin/qgamessGKS_tst $file_out1 $CoresUsed 1 "$GBUsing"gb $walltime parallel
+/home/ajp/GKSEDA/qgamess07 $file_out1 $CoresUsed 1 "$GBUsing"gb $walltime parallel
+elif [ $CoresUsed -le 64 ]
+ then
+ walltime=300:00:00
+ if grep -Fxq Br $file_out1.inp
+ then
+ walltime= 300:00:00
+ fi
+ nodes=2
+# CoresUsed2=$(echo "$CoresUsed/2 + 1" | bc)
+ CoresUsed2=$(echo "$CoresUsed/$nodes + 1" | bc)
+ GBUsed=$(echo "$GBUsing * $CoresUsed2 / $CoresUsed + 1" | bc ) 
+# GBUsing2=$(echo "$GBUsing/2 + 1" | bc)
+ GBUsing2=$(echo "$CoresUsed2 * $nodes * 5" | bc )
+# qgamessGKS $file_out1 $CoresUsed "$GBUsing"gb 16:00:00
+# qgamessGKS2 $file_out1 $CoresUsed2 2 "$GBUsed"gb 16:00:00
+#$root/bin/qgamessGKS_tst $file_out1 $CoresUsed2 $nodes "$GBUsing2"gb $walltime parallel
+/home/ajp/GKSEDA/qgamess07 $file_out1 $CoresUsed2 $nodes "$GBUsing2"gb $walltime parallel
+# qgamessGKS_tst $file_out1 $CoresUsed 1 "$GBUsing"gb 30:00:00
+ else
+ walltime=100:00:00
+ if grep -Fxq Br $file_out1.inp
+ then
+ walltime= 120:00:00
+ fi
+ nodes=3
+ CoresUsed2=$(echo "$CoresUsed/$nodes + 1" | bc)
+ GBUsed=$(echo "$GBUsing * $CoresUsed2 / $CoresUsed + 1" | bc )
+## GBUsing2=$(echo "$GBUsing/2" | bc)
+ GBUsing2=$(echo " $CoresUsed2 * $nodes * 5" | bc )
+#GBUsing2=$(echo " $CoresUsed * 5" | bc )
+## qgamessGKS2 $file_out1 $CoresUsed2 4 "$GBUsing"gb 16:00:00
+# $root/bin/qgamessGKS_tst  $file_out1 $CoresUsed2 $nodes "$GBUsing2"gb $walltime parallel
+/home/ajp/GKSEDA/qgamess07 $file_out1 $CoresUsed2 $nodes "$GBUsing2"gb $walltime parallel
+ #qgamessGKS_tst $file_out1 12 $nodes "$GBUsing2"gb 30:00:00
+# qgamessGKS_tst $file_out1 18 2 "$GBUsing"gb 30:00:00
+#qgamessGKS_tst $file_out1 24 2 "$GBUsing"gb 30:00:00
+ fi
+else
+echo "Already Finished"
+fi
+rm file_end.tmp
+ 

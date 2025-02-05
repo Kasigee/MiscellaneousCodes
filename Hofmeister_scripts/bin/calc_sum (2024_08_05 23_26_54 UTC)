@@ -1,0 +1,13 @@
+#!/bin/awk -f
+# scriptname: calc_sum
+# input: column number, data file
+BEGIN {
+    printf ("\tValue\tRunning total\n")
+}
+{
+    sum += $colnum;
+    printf ("%s\t%.12f\t%.12f\n", $1, $colnum, sum)
+}
+END { 
+    printf ("Total%.12f\n", sum)
+}

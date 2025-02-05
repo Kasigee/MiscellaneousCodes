@@ -1,0 +1,28 @@
+#!/bin/bash
+
+echo "$0 outputfile.out #natoms"
+natoms=$2
+
+
+echo "output file is $1, number of atoms is $natoms"
+linestart1=`grep -n Coordinates $1 | tail -n1 | awk -F: '{print $1}'`
+linestart2=`expr $linestart1 + 2`
+
+linefinish=`expr $linestart2 + $natoms`
+outputname=`echo $1 | awk -F '.' '{print $1"_3ob.xyz"}'`
+echo $outputname
+
+
+echo $natoms > $outputname
+echo "Comment " >> $outputname
+head -n $linefinish $1 | tail -n $natoms | awk '{ print "atom"$2,$4,$5,$6}' > tempcoords.tmp 
+for k in ` awk  '{ print $1 }' tempcoords.tmp`
+do
+atomnumber=`echo $k | awk -F'atom' '{print $2}'`
+atomletter=`grep $atomnumber ~/bin/elementlist | head -n1 | awk '{ print $2}'`
+sed -i "s/"$k"/$atomletter/g" tempcoords.tmp
+done
+cat tempcoords.tmp >> $outputname
+rm tempcoords.tmp
+#rm sed??????
+

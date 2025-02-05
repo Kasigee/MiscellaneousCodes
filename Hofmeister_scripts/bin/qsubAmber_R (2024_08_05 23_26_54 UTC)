@@ -1,0 +1,51 @@
+#!/bin/sh
+#
+# Submit an Amber job to the grid
+#
+# $1      -- (prefix)f of input file
+# $2      -- wall time (hours)
+# $3	  -- number of cores
+# $4	  -- memory (use unit such as gb)
+#
+
+if [ $# -ne 5 ]
+then
+	echo "Usage: $0 jobf  wallclocktime(hh:mm:ss) ncpus mem(gb) solv"
+   exit 1
+fi
+
+f=$1
+solv=$5
+
+# Start creating the input file
+cat <<END >>$f.job
+#!/bin/bash
+#PBS -N $f
+#PBS -l select=1:ncpus=$3:mem=$4
+#PBS -l walltime=$2
+#PBS -r n
+#PBS -q allq
+
+export OMP_NUM_THREADS=1
+ulimit -s unlimited
+
+source /home/kpg600/.bashrc
+cd \$PBS_O_WORKDIR
+conda init bash
+conda activate AmberTools20
+
+#Minimise:
+#sander -O -i "$f"_min.$solv.in -o "$f"_min.$solv.out -p "$f".$solv.prmtop -c "$f".$solv.inpcrd -r "$f"_min.$solv.rst -ref "$f".$solv.inpcrd
+#Heat:
+#sander -O -i "$f"_heat.$solv.in -o "$f"_heat.$solv.out -p "$f".$solv.prmtop -c "$f"_min.$solv.rst -r "$f"_heat.$solv.rst -x "$f"_heat.$solv.netcdf -ref "$f"_min.$solv.rst
+#Production MD run:
+sander -O -i "$f"_prod.$solv.in -o "$f"_prod.$solv.out -p "$f".$solv.prmtop -c "$f"_prod.$solv.rst -r "$f"_prod.$solv.rst -x "$f"_prod.$solv.netcdf -ref "$f"_heat.$solv.rst
+
+END
+
+# Now submit it.
+qsub $f.job
+rm -f $f.job
+
+exit 0
+

@@ -1,0 +1,44 @@
+#!/bin/bash
+
+if [ $# -ne 4 ]
+then
+ echo "Usage: $0 job.[run] cores mem(gb) time(hh:mm:ss)"
+ exit 1
+fi
+
+job=$1
+cores=$2
+mem=$3
+walltime=$4
+
+#check for files
+
+for f in $1.run
+do
+ if [ ! -f $f ]
+ then
+  echo "The file $f does not exist. Job is not submitted."
+  exit 1
+ fi
+done
+
+cat <<END > $1.job
+#!/bin/bash 
+#PBS -N $job
+#PBS -l select=1:ncpus=$cores:mem=$mem
+#PBS -l walltime=$walltime
+#PBS -k eo
+
+cd \$PBS_O_WORKDIR
+echo "This job is running on host \`hostname\`" > $f.out
+echo "Current directory: \$PBS_O_WORKDIR" >> $f.out
+date >> $f.out
+
+
+sh $job.run "NSCM=/home/ajp/adf2016.104/licence.txt; export NSCM" > $job.out
+
+END
+
+#do it
+qsub $1.job 
+#rm -f $1.job
